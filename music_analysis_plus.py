@@ -2,7 +2,8 @@
 
 import asyncio
 import os
-import tempfile
+from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import sounddevice as sd
@@ -20,6 +21,10 @@ from mcp_music_analysis.server import (
 from mcp_music_analysis.server import download_from_url, download_from_youtube
 
 
+DATA_DIR = Path(__file__).resolve().parent / "data"
+ANALYSES_DIR = DATA_DIR / "analyses"
+ANALYSES_DIR.mkdir(parents=True, exist_ok=True)
+
 CABLE_DEVICE_ID = None
 for i, d in enumerate(sd.query_devices()):
     if "CABLE Output" in d["name"] and d["max_input_channels"] > 0:
@@ -27,10 +32,21 @@ for i, d in enumerate(sd.query_devices()):
         break
 
 
+def play_audio(audio, sr):
+    """Play audio data through the default output device (non-blocking)."""
+    sd.play(audio, sr)
+
+
+def play_wav(path: str):
+    """Play a WAV file through the default output device."""
+    audio, sr = sf.read(path)
+    play_audio(audio, sr)
+
+
 @mcp.tool()
 async def capture_ableton(
     duration: float = 5.0,
-    output_name: str = None,
+    output_name: str | None = None,
 ) -> dict:
     """
     Capture audio from Ableton Live via VB-Cable and load it for analysis.
@@ -43,7 +59,7 @@ async def capture_ableton(
     Returns the y_path of the loaded audio, ready for analysis with the other tools.
     """
     if output_name is None:
-        output_name = "ableton_capture"
+        output_name = f"capture_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
     if CABLE_DEVICE_ID is None:
         raise RuntimeError(
@@ -51,7 +67,7 @@ async def capture_ableton(
             "Make sure VB-Cable is installed."
         )
 
-    wav_path = os.path.join(tempfile.gettempdir(), f"{output_name}.wav")
+    wav_path = str(ANALYSES_DIR / f"{output_name}.wav")
     recorded = []
     event = asyncio.Event()
 
@@ -92,7 +108,9 @@ async def capture_ableton(
             "3. The track is not muted"
         )
 
-    return load(wav_path)
+    result = load(wav_path)
+    result["wav_path"] = wav_path
+    return result
 
 
 @mcp.tool()
