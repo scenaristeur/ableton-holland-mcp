@@ -91,7 +91,30 @@ pip install -r requirements.txt
 4. Audio Input Device: **CABLE Output (VB-Audio Virtual Cable)** (optionnel)
 5. Activer **"In/Out"** dans la vue Session
 
-### 4. Configuration opencode
+### 6. AbletonMCP Remote Script
+
+Le Remote Script `AbletonMCP_Remote_Script.py` (à la racine du projet) permet à `ableton-mcp` de communiquer avec Ableton Live via socket.
+
+#### Installation
+
+1. Copie `AbletonMCP_Remote_Script.py` dans le dossier des Remote Scripts d'Ableton :
+   ```
+   C:\Users\[Username]\AppData\Roaming\Ableton\Live X.X.X\Preferences\User Remote Scripts\AbletonMCP\__init__.py
+   ```
+   (renommer en `__init__.py` et le placer dans un dossier `AbletonMCP/`)
+
+   *Autres emplacements possibles :*
+   - `C:\ProgramData\Ableton\Live XX\Resources\MIDI Remote Scripts\AbletonMCP\`
+   - `C:\Program Files\Ableton\Live XX\Resources\MIDI Remote Scripts\AbletonMCP\`
+
+2. Lance **Ableton Live** → **Options → Preferences → Link, Tempo & MIDI**
+3. Dans **Control Surface**, sélectionne **"AbletonMCP"**
+4. Mets **Input** et **Output** sur **"None"**
+5. Redémarre Ableton
+
+Le script se trouve aussi dans le dépôt GitHub original : [ahujasid/ableton-mcp/AbletonMCP_Remote_Script](https://github.com/ahujasid/ableton-mcp/blob/main/AbletonMCP_Remote_Script/__init__.py)
+
+### 7. Configuration opencode
 
 ```json
 {
@@ -155,10 +178,11 @@ ableton-holland-mcp/
 │   └── analyses/          # Résultats d'analyse (.wav + .csv)
 ├── dashboard/
 │   └── app.py             # Interface graphique (Tkinter + matplotlib)
-├── music_analysis_plus.py # Serveur MCP personnalisé (capture + analyse)
-├── capture_audio.py       # Script capture simple (sounddevice, legacy)
-├── requirements.txt       # Dépendances Python
-├── opencode.jsonc         # Configuration MCP pour opencode
+├── AbletonMCP_Remote_Script.py  # Remote Script Ableton (à copier dans Ableton)
+├── music_analysis_plus.py       # Serveur MCP personnalisé (capture + analyse)
+├── capture_audio.py             # Script capture simple (sounddevice, legacy)
+├── requirements.txt             # Dépendances Python
+├── opencode.jsonc               # Configuration MCP pour opencode
 ├── .gitignore
 └── README.md
 ```
@@ -298,6 +322,12 @@ python dashboard/app.py
 → Vérifier que VB-Cable est installé
 
 ## Notes de version
+
+### Itération 4 (24 juin 2026) — Remote Script arrangement
+- Mise à jour du Remote Script Ableton (v1314 lignes) avec support Arrangement View
+- Remote Script copié à la racine du projet (`AbletonMCP_Remote_Script.py`)
+- Documentation de l'installation du Remote Script dans le README
+- Commandes arrangement : `switch_to_arrangement_view`, `duplicate_to_arrangement`, `set_arrangement_time`, `get_arrangement_clips`
 
 ### Itération 3 (24 juin 2026) — Monitoring temps réel
 - Voicemeeter installé et configuré (A1 = enceintes, A2 = CABLE Input)
