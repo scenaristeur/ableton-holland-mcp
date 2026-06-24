@@ -1,0 +1,4 @@
+.env
+.venv
+.ruff_cache
+ffmpeg-n7.1-latest-win64-gpl-shared-7.1
