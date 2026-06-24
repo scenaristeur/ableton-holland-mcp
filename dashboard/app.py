@@ -75,17 +75,17 @@ class AudioAnalyzer:
         chroma_mean = chroma.mean(axis=1)
         kk_major = np.array(_KK_MAJOR)
         kk_minor = np.array(_KK_MINOR)
-        corr_major = np.array(
-            [np.correlate(chroma_mean, np.roll(kk_major, i)) for i in range(12)]
-        )
-        corr_minor = np.array(
-            [np.correlate(chroma_mean, np.roll(kk_minor, i)) for i in range(12)]
-        )
-        idx_major = int(np.argmax(corr_major))
-        idx_minor = int(np.argmax(corr_minor))
-        if corr_major[idx_major] >= corr_minor[idx_minor]:
-            return _NOTES[idx_major], "major", float(corr_major[idx_major])
-        return _NOTES[idx_minor], "minor", float(corr_minor[idx_minor])
+        results_major = [
+            float(np.dot(chroma_mean, np.roll(kk_major, i))) for i in range(12)
+        ]
+        results_minor = [
+            float(np.dot(chroma_mean, np.roll(kk_minor, i))) for i in range(12)
+        ]
+        idx_major = int(np.argmax(results_major))
+        idx_minor = int(np.argmax(results_minor))
+        if results_major[idx_major] >= results_minor[idx_minor]:
+            return _NOTES[idx_major], "major", results_major[idx_major]
+        return _NOTES[idx_minor], "minor", results_minor[idx_minor]
 
     @staticmethod
     def analyze(audio, sr):
@@ -99,6 +99,10 @@ class AudioAnalyzer:
         chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
         mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
         key_note, key_mode, key_conf = AudioAnalyzer._detect_key(chroma)
+        rms = librosa.feature.rms(y=y)[0]
+        centroid = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
+        rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)[0]
+        zcr = librosa.feature.zero_crossing_rate(y=y)[0]
         return {
             "duration_s": round(duration, 2),
             "tempo_bpm": round(float(tempo_val), 1),
@@ -110,6 +114,11 @@ class AudioAnalyzer:
             "onset_frames": onset_frames,
             "key": f"{key_note} {key_mode}",
             "key_confidence": round(key_conf, 1),
+            "energy_rms": float(np.mean(rms)),
+            "energy_peak": float(np.max(np.abs(y))),
+            "spectral_centroid": round(float(np.mean(centroid)), 0),
+            "spectral_rolloff": round(float(np.mean(rolloff)), 0),
+            "zero_crossing_rate": round(float(np.mean(zcr)), 4),
         }
 
     @staticmethod
@@ -334,6 +343,12 @@ class Dashboard:
         self._append_result(f"Durée   : {result['duration_s']}s")
         self._append_result(f"Tempo   : {result['tempo_bpm']} BPM")
         self._append_result(f"Tonalité: {result['key']}")
+        self._append_result(
+            f"Énergie : {result['energy_rms']:.3f} RMS | Peak {result['energy_peak']:.2f}"
+        )
+        self._append_result(
+            f"Timbre  : Centroid {result['spectral_centroid']:.0f}Hz | Rolloff {result['spectral_rolloff']:.0f}Hz"
+        )
         self._append_result(f"Onsets  : {result['beat_count']}")
 
         self._update_charts(result)

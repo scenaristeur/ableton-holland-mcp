@@ -212,6 +212,10 @@ async def capture_and_analyze(
 
     key_info = detect_key(y_path)
 
+    key_info = detect_key(y_path)
+    energy = analyze_energy(y_path)
+    spectral = analyze_spectral(y_path)
+
     return {
         "duration_s": dur,
         "tempo_bpm": bpm_value,
@@ -222,6 +226,99 @@ async def capture_and_analyze(
         "key": key_info["key"],
         "mode": key_info["mode"],
         "key_confidence": round(key_info["confidence"], 1),
+        "energy_rms": energy["rms_mean"],
+        "energy_peak": energy["peak"],
+        "spectral_centroid": spectral["centroid_mean"],
+        "spectral_rolloff": spectral["rolloff_mean"],
+        "zero_crossing_rate": spectral["zcr_mean"],
+    }
+
+
+@mcp.tool()
+def analyze_energy(y_path: str) -> dict:
+    """
+    Analyze energy and dynamics of an audio signal.
+    Returns RMS energy, peak amplitude, and dynamic range.
+    """
+    y = _read_y(y_path)
+    sr = 22050
+    rms = librosa.feature.rms(y=y)[0]
+    return {
+        "rms_mean": float(np.mean(rms)),
+        "rms_max": float(np.max(rms)),
+        "rms_min": float(np.min(rms)),
+        "peak": float(np.max(np.abs(y))),
+        "dynamic_range_db": float(20 * np.log10(np.max(rms) / max(np.min(rms), 1e-10))),
+    }
+
+
+@mcp.tool()
+def analyze_spectral(y_path: str) -> dict:
+    """
+    Analyze spectral characteristics of an audio signal.
+    Returns spectral centroid (brightness), rolloff, bandwidth, and zero crossing rate.
+    """
+    y = _read_y(y_path)
+    sr = 22050
+    centroid = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
+    rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)[0]
+    bandwidth = librosa.feature.spectral_bandwidth(y=y, sr=sr)[0]
+    zcr = librosa.feature.zero_crossing_rate(y=y)[0]
+    return {
+        "centroid_mean": float(np.mean(centroid)),
+        "centroid_max": float(np.max(centroid)),
+        "rolloff_mean": float(np.mean(rolloff)),
+        "rolloff_max": float(np.max(rolloff)),
+        "bandwidth_mean": float(np.mean(bandwidth)),
+        "zcr_mean": float(np.mean(zcr)),
+    }
+
+
+@mcp.tool()
+def analyze_tuning(y_path: str) -> dict:
+    """
+    Estimate the tuning offset (in cents) of an audio signal.
+    Useful for detecting if instruments are tuned to A=440Hz or another reference.
+    """
+    y = _read_y(y_path)
+    sr = 22050
+    tuning = librosa.estimate_tuning(y=y, sr=sr)
+    return {
+        "tuning_offset_cents": float(tuning),
+        "note": "A=440Hz"
+        if abs(tuning) < 5
+        else f"A={440 * 2 ** (tuning / 1200):.1f}Hz",
+    }
+
+
+@mcp.tool()
+def analyze_full(y_path: str) -> dict:
+    """
+    Run all analysis tools on an audio signal: key, energy, spectral, tuning.
+    Returns a combined dictionary of all results.
+    """
+    key = detect_key(y_path)
+    energy = analyze_energy(y_path)
+    spectral = analyze_spectral(y_path)
+    tuning = analyze_tuning(y_path)
+    dur = get_duration(y_path)
+    bpm_result = tempo(y_path)
+    bpm_value = (
+        float(bpm_result[0]) if hasattr(bpm_result, "__len__") else float(bpm_result)
+    )
+    return {
+        "duration_s": dur,
+        "tempo_bpm": bpm_value,
+        "key": key["key"],
+        "mode": key["mode"],
+        "key_confidence": round(key["confidence"], 1),
+        "energy_rms": energy["rms_mean"],
+        "energy_peak": energy["peak"],
+        "dynamic_range_db": round(energy["dynamic_range_db"], 1),
+        "spectral_centroid_hz": round(spectral["centroid_mean"], 0),
+        "spectral_rolloff_hz": round(spectral["rolloff_mean"], 0),
+        "zero_crossing_rate": round(spectral["zcr_mean"], 4),
+        "tuning_offset_cents": round(tuning["tuning_offset_cents"], 2),
     }
 
 
