@@ -19,6 +19,11 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
 
+# Krumhansl-Kessler key profiles
+_KK_MAJOR = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
+_KK_MINOR = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]
+_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 TESTS_DIR = DATA_DIR / "tests"
 ANALYSES_DIR = DATA_DIR / "analyses"
@@ -66,6 +71,23 @@ class AudioAnalyzer:
         return audio, samplerate
 
     @staticmethod
+    def _detect_key(chroma):
+        chroma_mean = chroma.mean(axis=1)
+        kk_major = np.array(_KK_MAJOR)
+        kk_minor = np.array(_KK_MINOR)
+        corr_major = np.array(
+            [np.correlate(chroma_mean, np.roll(kk_major, i)) for i in range(12)]
+        )
+        corr_minor = np.array(
+            [np.correlate(chroma_mean, np.roll(kk_minor, i)) for i in range(12)]
+        )
+        idx_major = int(np.argmax(corr_major))
+        idx_minor = int(np.argmax(corr_minor))
+        if corr_major[idx_major] >= corr_minor[idx_minor]:
+            return _NOTES[idx_major], "major", float(corr_major[idx_major])
+        return _NOTES[idx_minor], "minor", float(corr_minor[idx_minor])
+
+    @staticmethod
     def analyze(audio, sr):
         if audio.ndim > 1:
             y = np.mean(audio, axis=1)
@@ -76,6 +98,7 @@ class AudioAnalyzer:
         onset_frames = librosa.onset.onset_detect(y=y, sr=sr)
         chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
         mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+        key_note, key_mode, key_conf = AudioAnalyzer._detect_key(chroma)
         return {
             "duration_s": round(duration, 2),
             "tempo_bpm": round(float(tempo_val), 1),
@@ -85,6 +108,8 @@ class AudioAnalyzer:
             "y": y,
             "sr": sr,
             "onset_frames": onset_frames,
+            "key": f"{key_note} {key_mode}",
+            "key_confidence": round(key_conf, 1),
         }
 
     @staticmethod
@@ -308,6 +333,7 @@ class Dashboard:
         self._append_result(f"Fichier : {wav_path.name}")
         self._append_result(f"Durée   : {result['duration_s']}s")
         self._append_result(f"Tempo   : {result['tempo_bpm']} BPM")
+        self._append_result(f"Tonalité: {result['key']}")
         self._append_result(f"Onsets  : {result['beat_count']}")
 
         self._update_charts(result)
@@ -368,6 +394,7 @@ class Dashboard:
         self._append_result(f"Fichier : {os.path.basename(path)}")
         self._append_result(f"Durée   : {result['duration_s']}s")
         self._append_result(f"Tempo   : {result['tempo_bpm']} BPM")
+        self._append_result(f"Tonalité: {result['key']}")
         self._append_result(f"Onsets  : {result['beat_count']}")
 
         self._update_charts(result)

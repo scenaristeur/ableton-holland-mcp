@@ -6,8 +6,10 @@ from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import sounddevice as sd
 import soundfile as sf
+import librosa
 
 from mcp_music_analysis.server import (
     mcp,
@@ -30,6 +32,44 @@ for i, d in enumerate(sd.query_devices()):
     if "CABLE Output" in d["name"] and d["max_input_channels"] > 0:
         CABLE_DEVICE_ID = i
         break
+
+# Krumhansl-Kessler key profiles
+_KK_MAJOR = np.array(
+    [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
+)
+_KK_MINOR = np.array(
+    [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]
+)
+_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+
+def _read_y(y_path: str) -> np.ndarray:
+    return pd.read_csv(y_path, header=None).values.flatten()
+
+
+def _detect_key_from_chroma(chroma: np.ndarray) -> dict:
+    chroma_mean = chroma.mean(axis=1)
+    kk_major = np.array(_KK_MAJOR)
+    kk_minor = np.array(_KK_MINOR)
+    corr_major = np.array(
+        [float(np.dot(chroma_mean, np.roll(kk_major, i))) for i in range(12)]
+    )
+    corr_minor = np.array(
+        [float(np.dot(chroma_mean, np.roll(kk_minor, i))) for i in range(12)]
+    )
+    idx_major = int(np.argmax(corr_major))
+    idx_minor = int(np.argmax(corr_minor))
+    if corr_major[idx_major] >= corr_minor[idx_minor]:
+        return {
+            "key": _NOTES[idx_major],
+            "mode": "major",
+            "confidence": corr_major[idx_major],
+        }
+    return {
+        "key": _NOTES[idx_minor],
+        "mode": "minor",
+        "confidence": corr_minor[idx_minor],
+    }
 
 
 def play_audio(audio, sr):
@@ -137,12 +177,25 @@ async def capture_and_tempo(
 
 
 @mcp.tool()
+def detect_key(y_path: str) -> dict:
+    """
+    Detect the musical key of an audio signal using Krumhansl-Kessler algorithm.
+    Takes a y_path from load() or capture_ableton().
+    Returns key, mode (major/minor), and confidence score.
+    """
+    y = _read_y(y_path)
+    sr = 22050
+    chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+    return _detect_key_from_chroma(chroma)
+
+
+@mcp.tool()
 async def capture_and_analyze(
     duration: float = 5.0,
 ) -> dict:
     """
-    Capture audio from Ableton and run full analysis (tempo, beats, chroma, MFCC).
-    Returns paths to all analysis files.
+    Capture audio from Ableton and run full analysis (tempo, beats, chroma, MFCC, key).
+    Returns paths to all analysis files and detected key.
     """
     loaded = await capture_ableton(duration=duration)
     y_path = loaded["y_path"]
@@ -157,6 +210,8 @@ async def capture_and_analyze(
         float(bpm_result[0]) if hasattr(bpm_result, "__len__") else float(bpm_result)
     )
 
+    key_info = detect_key(y_path)
+
     return {
         "duration_s": dur,
         "tempo_bpm": bpm_value,
@@ -164,6 +219,9 @@ async def capture_and_analyze(
         "chroma_path": chroma_path,
         "mfcc_path": mfcc_path,
         "y_path": y_path,
+        "key": key_info["key"],
+        "mode": key_info["mode"],
+        "key_confidence": round(key_info["confidence"], 1),
     }
 
 
