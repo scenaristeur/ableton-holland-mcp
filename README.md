@@ -5,42 +5,50 @@ Capture audio en direct depuis **Ableton Live** via **VB-Cable** et analyse musi
 ## Architecture
 
 ```
-┌─────────────────┐     VB-Cable      ┌──────────────────┐
-│  Ableton Live   │────Audio Out────▶│  CABLE Input     │
-│  (audio engine) │                  │  (Virtual Cable) │
-└────────┬────────┘                  └────────┬─────────┘
-         │                                    │
-         │  Monitoring                        ▼
-         │  (Voicemeeter /              ┌──────────────────┐
-         │   Windows Listen)            │  CABLE Output    │
-         ▼                              │  (capture here)  │
-   ┌──────────┐                         └────────┬─────────┘
-   │ Focusrite│                                   │
-   │ Speakers │                          ┌────────┴────────┐
-   └──────────┘                          ▼                 ▼
-                                  ┌────────────┐   ┌──────────────┐
-                                  │ MCP server │   │  Dashboard   │
-                                  │ (opencode) │   │  (Tkinter)   │
-                                  └──────┬─────┘   └──────┬───────┘
-                                         │                │
-                                         ▼                ▼
-                                   ┌──────────────────────────┐
-                                   │      librosa (analyse)   │
-                                   └────────────┬─────────────┘
-                                                │
-                                                ▼
-                                   ┌──────────────────────┐
-                                   │   data/analyses/     │
-                                   │   (.wav + .csv)      │
-                                   └──────────────────────┘
+┌─────────────────┐     Voicemeeter     ┌──────────────┐
+│  Ableton Live   │────Virtual Input──▶│  Voicemeeter │
+│  (audio engine) │                    │  (mixer)     │
+└─────────────────┘                    └──────┬───────┘
+                                              │
+                          ┌───────────────────┼───────────────────┐
+                          ▼                   ▼                   ▼
+                   ┌────────────┐     ┌──────────────┐     ┌──────────────┐
+                   │  Enceintes │     │  CABLE Input │     │  Casque /    │
+                   │  (Intel)   │     │  (VB-Cable)  │     │  Focusrite   │
+                   │  monitoring│     │  (capture)   │     │  (optionnel) │
+                   └────────────┘     └──────┬───────┘     └──────────────┘
+                                             │
+                                             ▼
+                                      ┌──────────────┐
+                                      │ CABLE Output │
+                                      │ (sounddevice)│
+                                      └──────┬───────┘
+                                             │
+                                   ┌─────────┴─────────┐
+                                   ▼                   ▼
+                            ┌────────────┐     ┌──────────────┐
+                            │ MCP server │     │  Dashboard   │
+                            │ (opencode) │     │  (Tkinter)   │
+                            └──────┬─────┘     └──────┬───────┘
+                                   │                   │
+                                   ▼                   ▼
+                             ┌──────────────────────────┐
+                             │      librosa (analyse)   │
+                             └────────────┬─────────────┘
+                                          ▼
+                             ┌──────────────────────┐
+                             │   data/analyses/     │
+                             │   (.wav + .csv)      │
+                             └──────────────────────┘
 ```
 
 ## Prérequis
 
 | Logiciel | Rôle |
-|---|---|
+|---|---|---|
 | [Ableton Live](https://www.ableton.com) 11+ | Station audio |
-| [VB-Cable](https://vb-audio.com/Cable/) | Routage audio virtuel |
+| [VB-Cable](https://vb-audio.com/Cable/) | Routage audio virtuel (capture) |
+| [Voicemeeter](https://vb-audio.com/Voicemeeter/) (Vanilla ou Banana) | Mixeur virtuel (monitoring + routage) |
 | Python 3.12+ | Moteur d'analyse |
 | [opencode](https://opencode.ai) | CLI agent MCP |
 
@@ -52,7 +60,13 @@ Capture audio en direct depuis **Ableton Live** via **VB-Cable** et analyse musi
 2. Lancer `VBCABLE_Setup.exe` en administrateur
 3. Redémarrer Windows
 
-### 2. Python
+### 2. Voicemeeter
+
+1. Télécharger depuis [vb-audio.com/Voicemeeter](https://vb-audio.com/Voicemeeter/)
+2. Lancer `VoicemeeterSetup.exe` en administrateur
+3. Redémarrer Windows
+
+### 3. Python
 
 ```bash
 python -m venv .venv
@@ -60,11 +74,20 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### 3. Configuration Ableton Live
+### 4. Configuration Voicemeeter
+
+1. Lancer **Voicemeeter** (démarrer menu ou `C:\Program Files (x86)\VB\Voicemeeter\Voicemeeter.exe`)
+2. Dans **Hardware Out** (colonne de droite) :
+   - **A1** → choisir tes enceintes (Intel Display Audio, Focusrite...)
+   - **A2** → choisir **CABLE Input (VB-Audio Virtual Cable)**
+3. Dans **Virtual Input** (colonne de gauche) → laisser **Voicemeeter VAIO** par défaut
+4. Régler les niveaux (A1 = monitoring, A2 = capture)
+
+### 5. Configuration Ableton Live
 
 1. **Options → Preferences → Audio**
-2. Driver Type: **MME / DirectX** (pas ASIO — sinon VB-Cable est bloqué en exclusif)
-3. Audio Output Device: **CABLE Input (VB-Audio Virtual Cable)**
+2. Driver Type: **MME / DirectX**
+3. Audio Output Device: **Voicemeeter Virtual Audio Cable** (ou **Voicemeeter VAIO**)
 4. Audio Input Device: **CABLE Output (VB-Audio Virtual Cable)** (optionnel)
 5. Activer **"In/Out"** dans la vue Session
 
@@ -154,15 +177,28 @@ Quand Ableton envoie son audio vers VB-Cable → plus de son dans les enceintes.
 
 *Avantage* : sans logiciel supplémentaire. *Inconvénient* : léger décalage (latence WDM).
 
-### Méthode 2 : Voicemeeter (VB-Audio)
+### Méthode 2 : Voicemeeter (recommandée)
 
-Installé séparément. Permet de router l'audio simultanément vers plusieurs sorties (Focusrite + CABLE Input) avec contrôle du mix.
+Route l'audio d'Ableton vers plusieurs sorties simultanément.
 
-```bash
-# Configuration à venir après installation et redémarrage
+#### Configuration
+
+1. Lance **Voicemeeter**
+2. **Hardware Out** (colonne de droite) :
+   - **A1** → enceintes (Intel Display Audio, Focusrite...)
+   - **A2** → **CABLE Input (VB-Audio Virtual Cable)**
+3. **Virtual Input** → Ableton envoie sur **Voicemeeter VAIO**
+4. Ajuste les volumes (A1 = ce que tu entends, A2 = niveau envoyé à la capture)
+
+#### Routage final
+
+```
+Ableton → Voicemeeter VAIO → A1: Enceintes (monitoring)
+                            → A2: CABLE Input → CABLE Output → capture
 ```
 
-*Avantage* : monitoring en temps réel, contrôle du volume, latence configurable.
+*Avantage* : monitoring temps réel, contrôle du mix, pas de latence supplémentaire.
+*Remarque* : la capture MCP continue d'écouter sur **CABLE Output** — inchangé.
 
 ### Méthode 3 : Dashboard Python
 
@@ -211,11 +247,12 @@ python dashboard/app.py
 
 ## Prochaines étapes
 
-### Itération 3 — Monitoring temps réel avec Voicemeeter
+### Itération 3 — Monitoring temps réel avec Voicemeeter ✅
 
-- [ ] Configurer Voicemeeter pour router Ableton → Focusrite (monitoring) + CABLE Input (capture)
-- [ ] Adapter la capture MCP pour fonctionner avec ou sans Voicemeeter
-- [ ] Documenter le setup final
+- [x] Installer et configurer Voicemeeter
+- [x] Router Ableton → Voicemeeter → enceintes (monitoring) + CABLE Input (capture)
+- [x] Valider la capture MCP inchangée
+- [x] Documenter le setup final
 
 ### Itération 4 — Analyse avancée
 
@@ -247,13 +284,30 @@ python dashboard/app.py
 ### Device busy
 → Ableton est en mode ASIO. Passer en MME/DirectX dans les préférences Ableton
 
+### Voicemeeter ne s'affiche pas dans Ableton
+→ Redémarrer Voicemeeter et/ou Ableton. Vérifier que le service Voicemeeter est lancé (icône dans la barre des tâches).
+
+### Pas de son dans les enceintes (Voicemeeter)
+→ Vérifier que **A1** est bien assigné à un périphérique physique dans Voicemeeter
+→ Vérifier le niveau du slider A1
+→ Vérifier le bouton **Mute** sur la colonne Virtual Input
+
+### Capture silencieuse avec Voicemeeter
+→ Vérifier que **A2** pointe bien vers **CABLE Input**
+→ Vérifier le niveau du slider A2
+→ Vérifier que VB-Cable est installé
+
 ## Notes de version
+
+### Itération 3 (24 juin 2026) — Monitoring temps réel
+- Voicemeeter installé et configuré (A1 = enceintes, A2 = CABLE Input)
+- Monitoring en temps réel sans latence supplémentaire
+- Documentation du routage Voicemeeter
 
 ### Itération 2 (24 juin 2026) — Stabilisation
 - Capture sauvegardée dans `data/analyses/` avec timestamp
 - Dashboard graphique Tkinter (capture, analyse, visualisation, playback)
 - Documentation complète (README, requirements.txt, .gitignore)
-- Monitoring audio : Windows Listen + Voicemeeter (en cours)
 - Export WAV + CSV organisé dans `data/`
 
 ### Itération 1 (20 juin 2026) — Première version
