@@ -9,3 +9,5 @@ data/analyses/*.wav
 data/analyses/*.csv
 data/tests/*.wav
 data/tests/*.mp3
+opencode.jsonc
+sources

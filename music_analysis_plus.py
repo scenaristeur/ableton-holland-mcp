@@ -4,6 +4,7 @@ import asyncio
 import os
 from datetime import datetime
 from pathlib import Path
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -85,7 +86,7 @@ def play_wav(path: str):
 
 @mcp.tool()
 async def capture_ableton(
-    duration: float = 5.0,
+    duration: Union[float, int] = 300.0,
     output_name: str | None = None,
 ) -> dict:
     """
@@ -93,7 +94,7 @@ async def capture_ableton(
     Requires Ableton's audio output to be set to 'CABLE Input (VB-Audio Virtual Cable)'.
 
     Parameters:
-    - duration: Recording duration in seconds (default: 5.0)
+    - duration: Recording duration in seconds (default: 300.0)
     - output_name: Optional base name for the output file
 
     Returns the y_path of the loaded audio, ready for analysis with the other tools.
@@ -155,7 +156,7 @@ async def capture_ableton(
 
 @mcp.tool()
 async def capture_and_tempo(
-    duration: float = 5.0,
+    duration: Union[float, int] = 300.0,
     hop_length: int = 512,
     start_bpm: float = 120,
 ) -> dict:
@@ -191,7 +192,7 @@ def detect_key(y_path: str) -> dict:
 
 @mcp.tool()
 async def capture_and_analyze(
-    duration: float = 5.0,
+    duration: Union[float, int] = 300.0,
 ) -> dict:
     """
     Capture audio from Ableton and run full analysis (tempo, beats, chroma, MFCC, key).
@@ -209,8 +210,6 @@ async def capture_and_analyze(
     bpm_value = (
         float(bpm_result[0]) if hasattr(bpm_result, "__len__") else float(bpm_result)
     )
-
-    key_info = detect_key(y_path)
 
     key_info = detect_key(y_path)
     energy = analyze_energy(y_path)
