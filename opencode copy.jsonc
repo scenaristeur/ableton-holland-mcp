@@ -11,5 +11,8 @@
       "command": [".venv/Scripts/python", "music_analysis_plus.py"],
       "enabled": true,
     },
+      "experimental": {
+    "mcp_timeout": 600000
+  }
   },
 }

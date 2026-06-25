@@ -86,7 +86,7 @@ def play_wav(path: str):
 
 @mcp.tool()
 async def capture_ableton(
-    duration: Union[float, int] = 300.0,
+    duration: Union[float, int] = 15.0,
     output_name: str | None = None,
 ) -> dict:
     """
@@ -156,7 +156,7 @@ async def capture_ableton(
 
 @mcp.tool()
 async def capture_and_tempo(
-    duration: Union[float, int] = 300.0,
+    duration: Union[float, int] = 15.0,
     hop_length: int = 512,
     start_bpm: float = 120,
 ) -> dict:
@@ -192,7 +192,7 @@ def detect_key(y_path: str) -> dict:
 
 @mcp.tool()
 async def capture_and_analyze(
-    duration: Union[float, int] = 300.0,
+    duration: Union[float, int] = 15.0,
 ) -> dict:
     """
     Capture audio from Ableton and run full analysis (tempo, beats, chroma, MFCC, key).

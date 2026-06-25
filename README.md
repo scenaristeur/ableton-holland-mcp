@@ -291,6 +291,10 @@ python dashboard/app.py
 - [ ] Whisper / transcription automatique des paroles (si voix)
 - [ ] Export des résultats en JSON structuré
 
+# A etudier 
+- https://www.youtube.com/watch?v=Hfq-NXEhmzs
+
+
 ## Dépannage
 
 ### "CABLE Output not found"
@@ -304,6 +308,7 @@ python dashboard/app.py
 ### Timeout MCP
 → Le serveur utilise `async def` + `await asyncio.sleep()` pour la capture
 → Si timeout : réduire la durée de capture ou vérifier les logs du serveur
+- https://mcpcat.io/guides/fixing-mcp-error-32001-request-timeout/
 
 ### Device busy
 → Ableton est en mode ASIO. Passer en MME/DirectX dans les préférences Ableton

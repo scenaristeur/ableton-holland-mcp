@@ -120,6 +120,7 @@ switch_to_arrangement_view → duplicate_to_arrangement × N → get_arrangement
 2. `set_arrangement_time(0)` — remettre le playhead au début (ou `set_arrangement_time(8)` si 0 ne fonctionne pas)
 3. `start_playback()` — lancer la lecture
 4. **Immédiatement** `capture_ableton(duration=N)` — capturer pendant que le son joue
+5. `stop_playback()` — toujours stopper la lecture, surtout si la capture échoue
 
 ```python
 # Workflow standard
@@ -129,6 +130,11 @@ start_playback()             # joue depuis le début
 capture_ableton(duration=15) # capture immédiate
 analyze_full(y_path)         # analyse
 ```
+
+**Remarques sur les timeouts :**
+- Si `capture_ableton` ou `capture_and_analyze` time out, réduire `duration` à ≤ 15 s.
+- Ne pas lancer plusieurs `load_instrument_or_effect` en parallèle pour éviter la saturation du serveur.
+- En cas de timeout persistant, consulter : https://mcpcat.io/guides/fixing-mcp-error-32001-request-timeout
 
 ## Conventions
 
@@ -153,21 +159,58 @@ analyze_full(y_path)         # analyse
 - Buildup / Chorus : + lead, variations
 - Outro : tutti ou fade
 
-## Plugins installés
-
-- **Surge XT** (VST3) — synthé open-source puissant
-- **Surge XT Effects** (VST3)
-- **Kontakt 7 & 8** (VST3)
-- **Massive X** (VST3)
-- **Reaktor 6** (VST3)
-- **Guitar Rig 7**
-- **ValhallaSupermassive** (VST3) — reverb/delay spatial
-- **Raum** (NI) — reverb
-- **Replika** (NI) — delay
-- **Supercharger** (NI) — compression
-
 Chargement par URI (exemple) : `load_instrument_or_effect(track, "query:Instruments#Synth...")`
 Utiliser `get_browser_tree("instruments")` pour explorer les URIs disponibles.
+
+## Profile Utilisateur: David
+
+**Tessiture vocale** : E3–B3 (baryton/tenor confortable)
+**Tonalité de référence** : Mi mineur (Em)
+**Analyse de référence** : `data/tests/01- Masculiniste-Emotionnal-Indie-Rock.mp3`
+- Spectral centroid : 645 Hz (timbre chaud, grave)
+- Dynamic range : 81.2 dB (large — voix expressive)
+- Tuning offset : -0.05 cents (juste)
+
+**Guide Voice préféré** : Some Trumpets (instrument rack)
+**Style de chant** : parlé-chanté, nonchalant et cynique (influence Gainsbourg / Desproges)
+
+## Guide Voix & Tessiture — Méthode
+
+Pour adapter un guide vocal à la tessiture d'un utilisateur :
+
+### 1. Analyser un échantillon vocal
+```python
+# Charger un fichier MP3/WAV de l'utilisateur
+load("path/to/recording.mp3")
+
+# Analyse complète
+analyze_full(y_path)  # → key, spectral_centroid, dynamic_range
+chroma_cqt(y_path)    # → distribution des hauteurs
+```
+
+### 2. Déterminer la tessiture
+| Spectral centroid | Tessiture | Décalage conseillé |
+|---|---|---|
+| < 800 Hz | Grave (baryton/basse) | E3–G3 |
+| 800–1200 Hz | Medium (ténor) | G3–C4 |
+| > 1200 Hz | Aigu (soprano/alto/falsetto) | C4–E4 |
+
+### 3. Créer le guide vocal
+1. Créer les clips MIDI dans la tessiture déterminée (pitch E3=40, G3=43, B3=47, etc.)
+2. Suivre les **degrés de l'accord** (root, 3rd, 5th, 7th) de chaque section
+3. Respecter le **phrasé des paroles** : une note par temps fort / syllabe accentuée
+   - Notes de 1–3 temps pour les syllabes courtes
+   - Notes de 4–5 temps pour les fins de phrase
+4. Charger un instrument doux (Some Trumpets, Warm Analog Pad) via `load_instrument_or_effect`
+5. Dupliquer dans l'arrangement aux positions des couplets/refrains/ponts
+
+### 4. Notes guide par section type (Em, 89 BPM)
+| Section | Grille | Guide conseillé |
+|---|---|---|
+| Couplet | Em7 \| Bm7 \| Am7 \| Em7 | E3→G3→B3→A3→C4→E3 (phrasé 3-5 temps) |
+| Refrain | Gmaj9 \| A7#9b13 \| Em9 \| Em9 | G3→D4→A3→B3→E3→G3 (plus large) |
+| Pont | Ascendant | E3→G3→A3→B3 (build-up) |
+| Outro | Descendant | B3→A3→G3→E3 (fade) |
 
 ## Limitations
 
@@ -175,6 +218,59 @@ Utiliser `get_browser_tree("instruments")` pour explorer les URIs disponibles.
 - Pas d'API pour freeze/flatten, modifier song_length, ou lire les notes MIDI existantes
 - Premier appel MCP après démarrage opencode peut timeout (~60s)
 - Arrangement API nécessite Remote Script v1314+ (dans `C:\ProgramData\Ableton\Live XX\Resources\MIDI Remote Scripts\AbletonMCP\__init__.py`)
+- `set_arrangement_time(time)` est imprécis : la position réelle peut différer de la valeur demandée (décalage systématique). Contournement : utiliser `start_playback()` puis régler manuellement dans Live, ou capturer à la position courante.
+- `load_instrument_or_effect` peut timeout si le serveur est occupé. Réessayer en réduisant la charge (ne pas lancer plusieurs appels simultanés).
+- **Pas d'API pour lire ou modifier les paramètres des devices** — `get_track_info` retourne les noms et types de devices mais pas leurs valeurs de paramètres (cutoff, resonance, threshold, ratio, etc.). Tout réglage fin doit être fait manuellement dans Live.
+
+## Paramètres des devices
+
+L'API MCP actuelle **ne permet pas** de lire ou modifier les paramètres individuels d'un device (potards, boutons, sliders). `get_track_info()` liste les devices (nom, class_name) mais pas leurs paramètres internes.
+
+### Contournements
+
+1. **Presets browser** — Utiliser `get_browser_tree("audio_effects")` / `get_browser_items_at_path(...)` pour trouver un preset dont les réglages se rapprochent du résultat voulu, puis `load_instrument_or_effect(track, uri)`. Exemple : au lieu de régler manuellement un Auto Filter, chercher un preset "Dub Low Pass" dans le browser.
+
+2. **Réglage manuel obligatoire** dans Live pour :
+   - **Auto Filter** : mode (LPF/HPF/BPF), cutoff, resonance, LFO amount/speed
+   - **Compressor** : threshold, ratio, attack, release, knee, makeup gain
+   - **Channel EQ** : fréquences, gain, Q de chaque bande
+   - **Reverb** : decay, pre-delay, size, diffusion, mix
+   - **Delay** : tempo sync, feedback, filter, mix
+   - **Saturator** : mode (A Bit Warmer, Studio Tape, etc.), drive, output
+   - **Limiter** : threshold, output ceiling
+   - **VST3** (ex: Surge XT) : tous les paramètres internes du plugin
+
+3. **Workflow recommandé** :
+   - Charger le device via `load_instrument_or_effect` (pour avoir le bon type d'effet)
+   - Ouvrir Live et tweaker manuellement les paramètres
+   - (Optionnel) Sauvegarder le réglage comme preset utilisateur dans Live pour le réutiliser
+
+## Troubleshooting : Timeout MCP (-32001)
+
+**Référence :** https://mcpcat.io/guides/fixing-mcp-error-32001-request-timeout
+
+Les erreurs `MCP error -32001 (Request timed out)` surviennent principalement dans deux cas :
+
+### 1. `capture_ableton` / `capture_and_analyze`
+- **Cause :** la capture bloque pendant `duration` secondes. Si la durée est > 15-20 s, le timeout du serveur MCP peut être atteint avant la fin.
+- **Solution :** utiliser `duration ≤ 15` pour la capture, puis traiter l'analyse séparément si besoin. Exemple :
+  ```
+  capture_ableton(duration=10)     # ne pas dépasser 15s
+  analyze_full(y_path)              # analyse légère, rapide
+  ```
+- **Si la capture renvoie « audio is silence » :** vérifier que l'Output Device d'Ableton pointe bien sur « CABLE Input (VB-Audio Virtual Cable) » et que la lecture est active.
+
+### 2. `load_instrument_or_effect`
+- **Cause :** le serveur Ableton MCP est saturé (surtout si plusieurs appels sont lancés en parallèle ou si l'interface Live est en train de charger un preset lourd).
+- **Solutions :**
+  - Attendre que tout chargement précédent soit terminé avant de lancer le suivant.
+  - Réduire le nombre d'appels simultanés (un seul `load_instrument_or_effect` à la fois).
+  - Si le timeout persiste, redémarrer le serveur MCP (`uvx ableton-mcp`).
+
+### 3. Règle générale
+- Toujours utiliser `timeout` param si disponible (certains outils MCP acceptent `timeout` en ms dans l'appel).
+- Éviter les `duration` > 30 pour les captures audio (préférer des captures courtes et successives).
+- Si le problème persiste, consulter : https://mcpcat.io/guides/fixing-mcp-error-32001-request-timeout
 
 ## Remote Script Installation
 
