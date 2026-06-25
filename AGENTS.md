@@ -174,18 +174,22 @@ Utiliser `get_browser_tree("instruments")` pour explorer les URIs disponibles.
 **Guide Voice préféré** : Some Trumpets (instrument rack)
 **Style de chant** : parlé-chanté, nonchalant et cynique (influence Gainsbourg / Desproges)
 
-## Guide Voix & Tessiture — Méthode
+## Guide Voix & Tessiture — Méthode Générique
 
-Pour adapter un guide vocal à la tessiture d'un utilisateur :
+### 0. Scanner le projet
+Avant de commencer :
+1. Lire le dossier `sources/<nom_projet>/` pour identifier les éléments existants (paroles brutes, accords, structure, instrument souhaité)
+2. Lister les chansons à produire et leur ordre
+3. Proposer à l'utilisateur la création des fichiers de chaque chanson :
+   - `PAROLES.md` (paroles + guide voix détaillé)
+   - Fichier structure (accords, tempo, arrangement)
+4. Attendre la validation de l'utilisateur avant de créer les fichiers
 
-### 1. Analyser un échantillon vocal
+### 1. Analyser un échantillon vocal (si disponible)
 ```python
-# Charger un fichier MP3/WAV de l'utilisateur
 load("path/to/recording.mp3")
-
-# Analyse complète
-analyze_full(y_path)  # → key, spectral_centroid, dynamic_range
-chroma_cqt(y_path)    # → distribution des hauteurs
+analyze_full(y_path)
+chroma_cqt(y_path)
 ```
 
 ### 2. Déterminer la tessiture
@@ -195,22 +199,45 @@ chroma_cqt(y_path)    # → distribution des hauteurs
 | 800–1200 Hz | Medium (ténor) | G3–C4 |
 | > 1200 Hz | Aigu (soprano/alto/falsetto) | C4–E4 |
 
-### 3. Créer le guide vocal
-1. Créer les clips MIDI dans la tessiture déterminée (pitch E3=40, G3=43, B3=47, etc.)
-2. Suivre les **degrés de l'accord** (root, 3rd, 5th, 7th) de chaque section
-3. Respecter le **phrasé des paroles** : une note par temps fort / syllabe accentuée
-   - Notes de 1–3 temps pour les syllabes courtes
-   - Notes de 4–5 temps pour les fins de phrase
-4. Charger un instrument doux (Some Trumpets, Warm Analog Pad) via `load_instrument_or_effect`
-5. Dupliquer dans l'arrangement aux positions des couplets/refrains/ponts
+### 3. Créer le fichier PAROLES.md avec guide voix
+Pour chaque section de la chanson (couplet, refrain, pont, etc.) :
 
-### 4. Notes guide par section type (Em, 89 BPM)
-| Section | Grille | Guide conseillé |
-|---|---|---|
-| Couplet | Em7 \| Bm7 \| Am7 \| Em7 | E3→G3→B3→A3→C4→E3 (phrasé 3-5 temps) |
-| Refrain | Gmaj9 \| A7#9b13 \| Em9 \| Em9 | G3→D4→A3→B3→E3→G3 (plus large) |
-| Pont | Ascendant | E3→G3→A3→B3 (build-up) |
-| Outro | Descendant | B3→A3→G3→E3 (fade) |
+1. **Identifier la grille d'accords** de chaque section
+2. **Annoter chaque ligne de paroles** avec les notes guides :
+   - Une note par temps fort / syllabe accentuée
+   - Notation : `G3 ◷3` = note G3 tenue 3 temps
+   - `→` poursuite sur la même note ou enchaînement
+3. **Rester dans la tessiture** de l'utilisateur (E3–B3 pour David)
+4. **Suivre les degrés de l'accord** (root, 3rd, 5th) pour chaque note guide
+   - Sur un accord de G : G3 (root), B3 (3rd), D4 (5th)
+   - Sur un accord de Em : E3 (root), G3 (b3rd), B3 (5th)
+   - Sur un accord de C : C4 (root), E3 (3rd), G3 (5th)
+   - Sur un accord de Am : A3 (root), C4 (b3rd), E3 (5th)
+5. **Durées de notes** :
+   - Syllabes courtes / début de phrase : 1–3 temps (souvent `◷3`)
+   - Fins de phrase / mots clés : 4–8 temps (`◷5` à `◷8`)
+6. **Ajouter un tableau de correspondance** pitch → note en fin de fichier
+
+### 4. Créer le guide vocal dans Ableton
+1. Charger un instrument guide clair (Sweet Lead, Shimmer Pluck, Soft Lead, etc.) via `load_instrument_or_effect` — éviter les instruments déjà utilisés dans la production
+2. Créer un clip MIDI par section, avec les notes du guide placées aux start_time correspondant aux temps forts
+3. Nommer chaque clip (`Guide - Couplet 1`, `Guide - Refrain`, etc.)
+4. Dupliquer dans l'arrangement aux positions des sections correspondantes
+
+### 5. Exemple de guide voix (format PAROLES.md)
+```markdown
+## Couplet (8 mesures)
+
+*Accords : G | Em | C | D*
+
+**Mes. 1-2 (G) :** `G3 ◷3` Texte sur le→`B3 ◷5` temps fort de la phrase
+
+**Mes. 3-4 (Em) :** `E3 ◷3` Deuxième ligne→`B3 ◷5` du couplet
+
+**Mes. 5-6 (C) :** `C4 ◷3` Troisième phrase→`G3 ◷5` qui se termine
+
+**Mes. 7-8 (D) :** `A3 ◷3` Dernière ligne du→`F#3 ◷5` couplet en descente
+```
 
 ## Limitations
 
