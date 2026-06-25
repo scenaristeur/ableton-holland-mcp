@@ -101,6 +101,9 @@ Le Remote Script `AbletonMCP_Remote_Script.py` (à la racine du projet) permet �
 
 --> "C:\ProgramData\Ableton\Live 12 Lite\Resources\MIDI Remote Scripts\AbletonMCP\__init__.py"
 
+ copy /Y "C:\Users\admin\dev\ableton-holland-mcp\AbletonMCP_Remote_Script.py" "C:\ProgramData\Ableton\Live 12 Lite\Resources\MIDI Remote Scripts\AbletonMCP\__init__.py"
+
+
 2. Lance **Ableton Live** → **Options → Preferences → Link, Tempo & MIDI**
 3. Dans **Control Surface**, sélectionne **"AbletonMCP"**
 4. Mets **Input** et **Output** sur **"None"**

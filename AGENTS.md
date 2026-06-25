@@ -38,6 +38,10 @@ Buffer Voicemeeter : 1024 samples pour stabilité
 | `get_track_info(index)` | Piste : nom, clips, devices, volume, pan, mute/solo/arm |
 | `set_tempo(bpm)` | Changer le tempo |
 | `start_playback()` / `stop_playback()` | Démarrer/arrêter |
+| `set_metronome(value)` / `get_metronome()` | Métronome on/off |
+| `set_session_record(value)` / `get_session_record()` | Session record on/off |
+| `nudge_up()` / `nudge_down()` | Nudge tempo fin |
+| `set_signature(numerator, denominator)` | Signature rythmique |
 
 ### Pistes
 | Tool | Description |
@@ -46,6 +50,10 @@ Buffer Voicemeeter : 1024 samples pour stabilité
 | `set_track_name(index, name)` | Renommer "1-Nom", "2-Nom"... |
 | `freeze_track(index)` | Freeze une piste |
 | `flatten_track(index)` | Flatten une piste frozen |
+| `delete_track(index)` | Supprimer une piste |
+| `duplicate_track(index)` | Dupliquer une piste |
+| `select_track(index)` | Sélectionner une piste (UI focus) |
+| `get_track_color(index)` / `set_track_color(index, color)` | Couleur piste (0–255) |
 
 ### Clips Session
 | Tool | Description |
@@ -57,6 +65,9 @@ Buffer Voicemeeter : 1024 samples pour stabilité
 | `get_clip_notes(track, slot)` | Lire les notes MIDI d'un clip |
 | `delete_session_clip(track, slot)` | Supprimer un clip session |
 | `delete_arrangement_clip(track, index)` | Supprimer un clip arrangement |
+| `duplicate_clip(track, slot)` | Dupliquer un clip (slot libre suivant) |
+| `quantize_clip(track, slot, amount)` | Quantifier (0.0–1.0) |
+| `get_clip_color(track, slot)` / `set_clip_color(track, slot, color)` | Couleur clip (0–255) |
 
 ### Instruments / Effets
 | Tool | Description |
@@ -97,6 +108,18 @@ Buffer Voicemeeter : 1024 samples pour stabilité
 | `get_sends(track)` | Lire les niveaux d'envoi |
 | `set_send(track, send_index, value)` | Régler un envoi |
 | `set_monitoring(track, state)` | Monitoring : 0=auto, 1=in, 2=off |
+
+### Crossfader (NEW)
+| Tool | Description |
+|---|---|
+| `get_crossfader()` | Lire la position du crossfader master (0.0–1.0) |
+| `set_crossfader(value)` | Positionner le crossfader master |
+
+### Groove (NEW)
+| Tool | Description |
+|---|---|
+| `get_groove_amount()` | Lire le groove global (0.0–1.0) |
+| `set_groove_amount(amount)` | Régler le groove global |
 
 ### Project (NEW)
 | Tool | Description |

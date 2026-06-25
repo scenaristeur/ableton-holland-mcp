@@ -341,6 +341,147 @@ def redo() -> dict[str, Any]:
     return _cmd("redo")
 
 
+# ── Track Management (NEW) ───────────────────────────────────────
+
+
+@app.tool()
+def delete_track(track_index: int) -> dict[str, Any]:
+    """Delete a track from the set."""
+    return _cmd("delete_track", track_index=track_index)
+
+
+@app.tool()
+def duplicate_track(track_index: int) -> dict[str, Any]:
+    """Duplicate a track."""
+    return _cmd("duplicate_track", track_index=track_index)
+
+
+@app.tool()
+def duplicate_clip(track_index: int, clip_index: int) -> dict[str, Any]:
+    """Duplicate a session clip in place (to next empty slot)."""
+    return _cmd("duplicate_clip", track_index=track_index, clip_index=clip_index)
+
+
+@app.tool()
+def quantize_clip(
+    track_index: int, clip_index: int, amount: float = 1.0
+) -> dict[str, Any]:
+    """Quantize a MIDI clip by amount (0.0–1.0)."""
+    return _cmd(
+        "quantize_clip", track_index=track_index, clip_index=clip_index, amount=amount
+    )
+
+
+@app.tool()
+def select_track(track_index: int) -> dict[str, Any]:
+    """Select a track in Ableton's UI."""
+    return _cmd("select_track", track_index=track_index)
+
+
+# ── Track / Clip Color (NEW) ─────────────────────────────────────
+
+
+@app.tool()
+def get_track_color(track_index: int) -> dict[str, Any]:
+    """Get a track's color index (0–255)."""
+    return _cmd("get_track_color", track_index=track_index)
+
+
+@app.tool()
+def set_track_color(track_index: int, color: int) -> dict[str, Any]:
+    """Set a track's color index (0–255)."""
+    return _cmd("set_track_color", track_index=track_index, color=color)
+
+
+@app.tool()
+def get_clip_color(track_index: int, clip_index: int) -> dict[str, Any]:
+    """Get a clip's color index (0–255)."""
+    return _cmd("get_clip_color", track_index=track_index, clip_index=clip_index)
+
+
+@app.tool()
+def set_clip_color(track_index: int, clip_index: int, color: int) -> dict[str, Any]:
+    """Set a clip's color index (0–255)."""
+    return _cmd(
+        "set_clip_color", track_index=track_index, clip_index=clip_index, color=color
+    )
+
+
+# ── Transport Extras (NEW) ────────────────────────────────────────
+
+
+@app.tool()
+def set_metronome(value: bool) -> dict[str, Any]:
+    """Toggle metronome on/off."""
+    return _cmd("set_metronome", value=value)
+
+
+@app.tool()
+def get_metronome() -> dict[str, Any]:
+    """Get metronome state."""
+    return _cmd("get_metronome")
+
+
+@app.tool()
+def set_session_record(value: bool) -> dict[str, Any]:
+    """Toggle session record on/off."""
+    return _cmd("set_session_record", value=value)
+
+
+@app.tool()
+def get_session_record() -> dict[str, Any]:
+    """Get session record state."""
+    return _cmd("get_session_record")
+
+
+@app.tool()
+def nudge_up() -> dict[str, Any]:
+    """Nudge tempo up."""
+    return _cmd("nudge_up")
+
+
+@app.tool()
+def nudge_down() -> dict[str, Any]:
+    """Nudge tempo down."""
+    return _cmd("nudge_down")
+
+
+@app.tool()
+def set_signature(numerator: int = 4, denominator: int = 4) -> dict[str, Any]:
+    """Set time signature."""
+    return _cmd("set_signature", numerator=numerator, denominator=denominator)
+
+
+# ── Crossfader (NEW) ─────────────────────────────────────────────
+
+
+@app.tool()
+def get_crossfader() -> dict[str, Any]:
+    """Get master crossfader position (0.0–1.0)."""
+    return _cmd("get_crossfader")
+
+
+@app.tool()
+def set_crossfader(value: float) -> dict[str, Any]:
+    """Set master crossfader position (0.0–1.0)."""
+    return _cmd("set_crossfader", value=value)
+
+
+# ── Groove (NEW) ─────────────────────────────────────────────────
+
+
+@app.tool()
+def get_groove_amount() -> dict[str, Any]:
+    """Get global groove amount (0.0–1.0)."""
+    return _cmd("get_groove_amount")
+
+
+@app.tool()
+def set_groove_amount(amount: float) -> dict[str, Any]:
+    """Set global groove amount (0.0–1.0)."""
+    return _cmd("set_groove_amount", amount=amount)
+
+
 # ── Entrypoint ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

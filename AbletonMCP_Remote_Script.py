@@ -264,6 +264,21 @@ class AbletonMCP(ControlSurface):
                 "save_project",
                 "undo",
                 "redo",
+                # New features
+                "delete_track",
+                "duplicate_track",
+                "duplicate_clip",
+                "quantize_clip",
+                "select_track",
+                "set_track_color",
+                "set_clip_color",
+                "set_metronome",
+                "set_session_record",
+                "nudge_up",
+                "nudge_down",
+                "set_signature",
+                "set_crossfader",
+                "set_groove_amount",
             ]:
                 # Use a thread-safe approach with a response queue
                 response_queue = queue.Queue()
@@ -397,6 +412,58 @@ class AbletonMCP(ControlSurface):
                             result = self._undo()
                         elif command_type == "redo":
                             result = self._redo()
+                        # ── New features ──────────────────────────────────────
+                        elif command_type == "delete_track":
+                            track_index = params.get("track_index", 0)
+                            result = self._delete_track(track_index)
+                        elif command_type == "duplicate_track":
+                            track_index = params.get("track_index", 0)
+                            result = self._duplicate_track(track_index)
+                        elif command_type == "duplicate_clip":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            result = self._duplicate_clip(track_index, clip_index)
+                        elif command_type == "quantize_clip":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            amount = params.get("amount", 1.0)
+                            result = self._quantize_clip(
+                                track_index, clip_index, amount
+                            )
+                        elif command_type == "select_track":
+                            track_index = params.get("track_index", 0)
+                            result = self._select_track(track_index)
+                        elif command_type == "set_track_color":
+                            track_index = params.get("track_index", 0)
+                            color = params.get("color", 0)
+                            result = self._set_track_color(track_index, color)
+                        elif command_type == "set_clip_color":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            color = params.get("color", 0)
+                            result = self._set_clip_color(
+                                track_index, clip_index, color
+                            )
+                        elif command_type == "set_metronome":
+                            value = params.get("value", False)
+                            result = self._set_metronome(value)
+                        elif command_type == "set_session_record":
+                            value = params.get("value", False)
+                            result = self._set_session_record(value)
+                        elif command_type == "nudge_up":
+                            result = self._nudge_up()
+                        elif command_type == "nudge_down":
+                            result = self._nudge_down()
+                        elif command_type == "set_signature":
+                            numerator = params.get("numerator", 4)
+                            denominator = params.get("denominator", 4)
+                            result = self._set_signature(numerator, denominator)
+                        elif command_type == "set_crossfader":
+                            value = params.get("value", 0.5)
+                            result = self._set_crossfader(value)
+                        elif command_type == "set_groove_amount":
+                            amount = params.get("amount", 0.0)
+                            result = self._set_groove_amount(amount)
 
                         # Put the result in the queue
                         response_queue.put({"status": "success", "result": result})
@@ -471,6 +538,22 @@ class AbletonMCP(ControlSurface):
             elif command_type == "get_arrangement_clips":
                 track_index = params.get("track_index", 0)
                 response["result"] = self._get_arrangement_clips(track_index)
+            # ── Read-only new features ─────────────────────────────────────────
+            elif command_type == "get_track_color":
+                track_index = params.get("track_index", 0)
+                response["result"] = self._get_track_color(track_index)
+            elif command_type == "get_clip_color":
+                track_index = params.get("track_index", 0)
+                clip_index = params.get("clip_index", 0)
+                response["result"] = self._get_clip_color(track_index, clip_index)
+            elif command_type == "get_metronome":
+                response["result"] = self._get_metronome()
+            elif command_type == "get_session_record":
+                response["result"] = self._get_session_record()
+            elif command_type == "get_crossfader":
+                response["result"] = self._get_crossfader()
+            elif command_type == "get_groove_amount":
+                response["result"] = self._get_groove_amount()
             else:
                 response["status"] = "error"
                 response["message"] = "Unknown command: " + command_type
@@ -1883,4 +1966,266 @@ class AbletonMCP(ControlSurface):
                 }
         except Exception as e:
             self.log_message("Error getting arrangement clip notes: " + str(e))
+            raise
+
+    # ═══════════════════════════════════════════════════════════════
+    # Track Management
+    # ═══════════════════════════════════════════════════════════════
+
+    def _delete_track(self, track_index):
+        """Delete a track from the set"""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            name = track.name
+            self._song.delete_track(track_index)
+            return {"deleted": True, "track_index": track_index, "name": name}
+        except Exception as e:
+            self.log_message("Error deleting track: " + str(e))
+            raise
+
+    def _duplicate_track(self, track_index):
+        """Duplicate a track"""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            self._song.duplicate_track(track_index)
+            return {"duplicated": True, "track_index": track_index}
+        except Exception as e:
+            self.log_message("Error duplicating track: " + str(e))
+            raise
+
+    def _duplicate_clip(self, track_index, clip_index):
+        """Duplicate a session clip in place (to next empty slot)"""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            if clip_index < 0 or clip_index >= len(track.clip_slots):
+                raise IndexError("Clip index out of range")
+            clip_slot = track.clip_slots[clip_index]
+            if not clip_slot.has_clip:
+                raise Exception("No clip in slot")
+            # Find next empty slot on the same track after current
+            found = False
+            for i in range(clip_index + 1, len(track.clip_slots)):
+                if not track.clip_slots[i].has_clip:
+                    clip_slot.duplicate_clip_to(track.clip_slots[i])
+                    found = True
+                    return {"duplicated": True, "new_slot": i}
+            if not found:
+                raise Exception("No empty slot found for duplication")
+            return {"duplicated": True}
+        except Exception as e:
+            self.log_message("Error duplicating clip: " + str(e))
+            raise
+
+    def _quantize_clip(self, track_index, clip_index, amount):
+        """Quantize a MIDI clip by amount (0.0–1.0)"""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            if clip_index < 0 or clip_index >= len(track.clip_slots):
+                raise IndexError("Clip index out of range")
+            clip_slot = track.clip_slots[clip_index]
+            if not clip_slot.has_clip:
+                raise Exception("No clip in slot")
+            clip = clip_slot.clip
+            clip.quantize(amount)
+            return {"quantized": True, "amount": amount}
+        except Exception as e:
+            self.log_message("Error quantizing clip: " + str(e))
+            raise
+
+    def _select_track(self, track_index):
+        """Select a track in Ableton's UI"""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            self._song.view.selected_track = self._song.tracks[track_index]
+            return {"selected_track": track_index}
+        except Exception as e:
+            self.log_message("Error selecting track: " + str(e))
+            raise
+
+    # ═══════════════════════════════════════════════════════════════
+    # Track / Clip Color
+    # ═══════════════════════════════════════════════════════════════
+
+    def _get_track_color(self, track_index):
+        """Get a track's color index"""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            return {"track_index": track_index, "color": track.color}
+        except Exception as e:
+            self.log_message("Error getting track color: " + str(e))
+            raise
+
+    def _set_track_color(self, track_index, color):
+        """Set a track's color index (0–255)"""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            track.color = int(color)
+            return {"track_index": track_index, "color": int(color)}
+        except Exception as e:
+            self.log_message("Error setting track color: " + str(e))
+            raise
+
+    def _get_clip_color(self, track_index, clip_index):
+        """Get a clip's color index"""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            if clip_index < 0 or clip_index >= len(track.clip_slots):
+                raise IndexError("Clip index out of range")
+            clip_slot = track.clip_slots[clip_index]
+            if not clip_slot.has_clip:
+                raise Exception("No clip in slot")
+            return {
+                "track_index": track_index,
+                "clip_index": clip_index,
+                "color": clip_slot.clip.color,
+            }
+        except Exception as e:
+            self.log_message("Error getting clip color: " + str(e))
+            raise
+
+    def _set_clip_color(self, track_index, clip_index, color):
+        """Set a clip's color index (0–255)"""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            if clip_index < 0 or clip_index >= len(track.clip_slots):
+                raise IndexError("Clip index out of range")
+            clip_slot = track.clip_slots[clip_index]
+            if not clip_slot.has_clip:
+                raise Exception("No clip in slot")
+            clip_slot.clip.color = int(color)
+            return {
+                "track_index": track_index,
+                "clip_index": clip_index,
+                "color": int(color),
+            }
+        except Exception as e:
+            self.log_message("Error setting clip color: " + str(e))
+            raise
+
+    # ═══════════════════════════════════════════════════════════════
+    # Transport extras
+    # ═══════════════════════════════════════════════════════════════
+
+    def _set_metronome(self, value):
+        """Toggle metronome on/off"""
+        try:
+            self._song.metronome = bool(value)
+            return {"metronome": bool(value)}
+        except Exception as e:
+            self.log_message("Error setting metronome: " + str(e))
+            raise
+
+    def _get_metronome(self):
+        """Get metronome state"""
+        try:
+            return {"metronome": self._song.metronome}
+        except Exception as e:
+            self.log_message("Error getting metronome: " + str(e))
+            raise
+
+    def _set_session_record(self, value):
+        """Toggle session record on/off"""
+        try:
+            self._song.session_record = bool(value)
+            return {"session_record": bool(value)}
+        except Exception as e:
+            self.log_message("Error setting session record: " + str(e))
+            raise
+
+    def _get_session_record(self):
+        """Get session record state"""
+        try:
+            return {"session_record": self._song.session_record}
+        except Exception as e:
+            self.log_message("Error getting session record: " + str(e))
+            raise
+
+    def _nudge_up(self):
+        """Nudge tempo up"""
+        try:
+            self._song.nudge_up = True
+            return {"nudged": "up"}
+        except Exception as e:
+            self.log_message("Error nudging up: " + str(e))
+            raise
+
+    def _nudge_down(self):
+        """Nudge tempo down"""
+        try:
+            self._song.nudge_down = True
+            return {"nudged": "down"}
+        except Exception as e:
+            self.log_message("Error nudging down: " + str(e))
+            raise
+
+    def _set_signature(self, numerator, denominator):
+        """Set time signature"""
+        try:
+            self._song.signature_numerator = int(numerator)
+            self._song.signature_denominator = int(denominator)
+            return {
+                "signature_numerator": int(numerator),
+                "signature_denominator": int(denominator),
+            }
+        except Exception as e:
+            self.log_message("Error setting signature: " + str(e))
+            raise
+
+    # ═══════════════════════════════════════════════════════════════
+    # Crossfader
+    # ═══════════════════════════════════════════════════════════════
+
+    def _get_crossfader(self):
+        """Get master crossfader position"""
+        try:
+            value = self._song.master_track.mixer_device.crossfader.value
+            return {"crossfader": value}
+        except Exception as e:
+            self.log_message("Error getting crossfader: " + str(e))
+            raise
+
+    def _set_crossfader(self, value):
+        """Set master crossfader position (0.0–1.0)"""
+        try:
+            self._song.master_track.mixer_device.crossfader.value = float(value)
+            return {"crossfader": float(value)}
+        except Exception as e:
+            self.log_message("Error setting crossfader: " + str(e))
+            raise
+
+    # ═══════════════════════════════════════════════════════════════
+    # Groove
+    # ═══════════════════════════════════════════════════════════════
+
+    def _get_groove_amount(self):
+        """Get global groove amount"""
+        try:
+            return {"groove_amount": self._song.groove_amount}
+        except Exception as e:
+            self.log_message("Error getting groove amount: " + str(e))
+            raise
+
+    def _set_groove_amount(self, amount):
+        """Set global groove amount (0.0–1.0)"""
+        try:
+            self._song.groove_amount = float(amount)
+            return {"groove_amount": float(amount)}
+        except Exception as e:
+            self.log_message("Error setting groove amount: " + str(e))
             raise
