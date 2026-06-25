@@ -97,15 +97,9 @@ Le Remote Script `AbletonMCP_Remote_Script.py` (à la racine du projet) permet �
 
 #### Installation
 
-1. Copie `AbletonMCP_Remote_Script.py` dans le dossier des Remote Scripts d'Ableton :
-   ```
-   C:\Users\[Username]\AppData\Roaming\Ableton\Live X.X.X\Preferences\User Remote Scripts\AbletonMCP\__init__.py
-   ```
-   (renommer en `__init__.py` et le placer dans un dossier `AbletonMCP/`)
+1. Copie `AbletonMCP_Remote_Script.py` et renommer dans le dossier des Remote Scripts d'Ableton :
 
-   *Autres emplacements possibles :*
-   - `C:\ProgramData\Ableton\Live XX\Resources\MIDI Remote Scripts\AbletonMCP\`
-   - `C:\Program Files\Ableton\Live XX\Resources\MIDI Remote Scripts\AbletonMCP\`
+--> "C:\ProgramData\Ableton\Live 12 Lite\Resources\MIDI Remote Scripts\AbletonMCP\__init__.py"
 
 2. Lance **Ableton Live** → **Options → Preferences → Link, Tempo & MIDI**
 3. Dans **Control Surface**, sélectionne **"AbletonMCP"**

@@ -8,9 +8,9 @@ Assistant de production musicale connecté à Ableton Live via deux serveurs MCP
 
 ## Serveurs MCP
 
-### ableton-mcp (démarrage)
+### ableton-holland-mcp (démarrage) — local
 ```
-"command": ["uvx", "ableton-mcp"]
+"command": [".venv/Scripts/python", "ableton_mcp_server.py"]
 ```
 
 ### music-analysis (démarrage)
@@ -44,6 +44,8 @@ Buffer Voicemeeter : 1024 samples pour stabilité
 |---|---|
 | `create_midi_track(index=-1)` | Créer piste MIDI (index -1 = fin) |
 | `set_track_name(index, name)` | Renommer "1-Nom", "2-Nom"... |
+| `freeze_track(index)` | Freeze une piste |
+| `flatten_track(index)` | Flatten une piste frozen |
 
 ### Clips Session
 | Tool | Description |
@@ -52,6 +54,9 @@ Buffer Voicemeeter : 1024 samples pour stabilité
 | `add_notes_to_clip(track, slot, notes)` | Notes : `[{pitch, start_time, duration, velocity, mute}]` |
 | `set_clip_name(track, slot, name)` | Nommer un clip |
 | `fire_clip(track, slot)` / `stop_clip(track, slot)` | Lancer/arrêter |
+| `get_clip_notes(track, slot)` | Lire les notes MIDI d'un clip |
+| `delete_session_clip(track, slot)` | Supprimer un clip session |
+| `delete_arrangement_clip(track, index)` | Supprimer un clip arrangement |
 
 ### Instruments / Effets
 | Tool | Description |
@@ -60,6 +65,12 @@ Buffer Voicemeeter : 1024 samples pour stabilité
 | `get_browser_tree(category)` | Explorer le browser (`all`, `instruments`, `sounds`, `drums`, `audio_effects`, `midi_effects`) |
 | `get_browser_items_at_path(path)` | Items à un chemin (`"Instruments/Synth"`) |
 
+### Device Parameters (NEW)
+| Tool | Description |
+|---|---|
+| `get_device_parameters(track, device)` | Lire tous les paramètres d'un device (nom, valeur, min, max, quantized) |
+| `set_device_parameter(track, device, parameter_name, value)` | Modifier la valeur d'un paramètre |
+
 ### Arrangement (Remote Script v1314+ nécessaire)
 | Tool | Description |
 |---|---|
@@ -67,11 +78,31 @@ Buffer Voicemeeter : 1024 samples pour stabilité
 | `set_arrangement_time(time)` | Positionner le playhead (beats) |
 | `get_arrangement_clips(track)` | Lister les clips dans l'arrangement |
 | `duplicate_to_arrangement(track, slot, dest_time)` | Copier clip Session → Arrangement |
+| `get_arrangement_clip_notes(track, index)` | Lire notes MIDI d'un clip arrangement |
 
 ### Audio
 | Tool | Description |
 |---|---|
 | `create_audio_clip(track, slot, path)` | Importer fichier audio (Live 12.0.5+) |
+
+### Scenes (NEW)
+| Tool | Description |
+|---|---|
+| `create_scene(index=-1)` | Créer une scene |
+| `fire_scene(index)` | Lancer une scene |
+
+### Mixer (NEW)
+| Tool | Description |
+|---|---|
+| `get_sends(track)` | Lire les niveaux d'envoi |
+| `set_send(track, send_index, value)` | Régler un envoi |
+| `set_monitoring(track, state)` | Monitoring : 0=auto, 1=in, 2=off |
+
+### Project (NEW)
+| Tool | Description |
+|---|---|
+| `save_project()` | Sauvegarder le projet |
+| `undo()` / `redo()` | Annuler/rétablir |
 
 ## Outils Music Analysis disponibles
 
@@ -247,30 +278,24 @@ Pour chaque section de la chanson (couplet, refrain, pont, etc.) :
 - Arrangement API nécessite Remote Script v1314+ (dans `C:\ProgramData\Ableton\Live XX\Resources\MIDI Remote Scripts\AbletonMCP\__init__.py`)
 - `set_arrangement_time(time)` est imprécis : la position réelle peut différer de la valeur demandée (décalage systématique). Contournement : utiliser `start_playback()` puis régler manuellement dans Live, ou capturer à la position courante.
 - `load_instrument_or_effect` peut timeout si le serveur est occupé. Réessayer en réduisant la charge (ne pas lancer plusieurs appels simultanés).
-- **Pas d'API pour lire ou modifier les paramètres des devices** — `get_track_info` retourne les noms et types de devices mais pas leurs valeurs de paramètres (cutoff, resonance, threshold, ratio, etc.). Tout réglage fin doit être fait manuellement dans Live.
 
 ## Paramètres des devices
 
-L'API MCP actuelle **ne permet pas** de lire ou modifier les paramètres individuels d'un device (potards, boutons, sliders). `get_track_info()` liste les devices (nom, class_name) mais pas leurs paramètres internes.
+L'API MCP **permet maintenant** de lire et modifier les paramètres individuels d'un device :
+- `get_device_parameters(track, device)` — lit tous les paramètres (nom, valeur, min, max, quantifié)
+- `set_device_parameter(track, device, parameter_name, value)` — modifie la valeur
 
-### Contournements
+### Limites connues
 
-1. **Presets browser** — Utiliser `get_browser_tree("audio_effects")` / `get_browser_items_at_path(...)` pour trouver un preset dont les réglages se rapprochent du résultat voulu, puis `load_instrument_or_effect(track, uri)`. Exemple : au lieu de régler manuellement un Auto Filter, chercher un preset "Dub Low Pass" dans le browser.
+- Les paramètres `is_enabled=False` (certains params hérités ou dépendants) sont en lecture seule (skippés)
+- Les paramètres quantifiés (menus déroulants) prennent un index entier
+- L'API ne permet pas de lire/écrire les **courbes d'automation** — seulement les valeurs statiques
+- Les devices VST3 peuvent exposer leurs paramètres différemment selon l'implémentation
 
-2. **Réglage manuel obligatoire** dans Live pour :
-   - **Auto Filter** : mode (LPF/HPF/BPF), cutoff, resonance, LFO amount/speed
-   - **Compressor** : threshold, ratio, attack, release, knee, makeup gain
-   - **Channel EQ** : fréquences, gain, Q de chaque bande
-   - **Reverb** : decay, pre-delay, size, diffusion, mix
-   - **Delay** : tempo sync, feedback, filter, mix
-   - **Saturator** : mode (A Bit Warmer, Studio Tape, etc.), drive, output
-   - **Limiter** : threshold, output ceiling
-   - **VST3** (ex: Surge XT) : tous les paramètres internes du plugin
+### Contournements (quand l'API ne suffit pas)
 
-3. **Workflow recommandé** :
-   - Charger le device via `load_instrument_or_effect` (pour avoir le bon type d'effet)
-   - Ouvrir Live et tweaker manuellement les paramètres
-   - (Optionnel) Sauvegarder le réglage comme preset utilisateur dans Live pour le réutiliser
+1. **Presets browser** — Utiliser `get_browser_tree("audio_effects")` / `get_browser_items_at_path(...)` pour trouver un preset dont les réglages se rapprochent du résultat voulu, puis `load_instrument_or_effect(track, uri)`.
+2. Pour des réglages très fins (automation, routing), ouvrir Live manuellement.
 
 ## Troubleshooting : Timeout MCP (-32001)
 
