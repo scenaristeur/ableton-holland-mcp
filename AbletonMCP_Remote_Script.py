@@ -240,6 +240,7 @@ class AbletonMCP(ControlSurface):
                 "stop_clip",
                 "start_playback",
                 "stop_playback",
+                "load_instrument_or_effect",
                 "load_browser_item",
                 # Arrangement view – must run on the main thread
                 "switch_to_arrangement_view",
@@ -1055,6 +1056,10 @@ class AbletonMCP(ControlSurface):
             self.log_message(traceback.format_exc())
             raise
 
+    def _load_instrument_or_effect(self, track_index, uri):
+        """Load an instrument/effect onto a track by URI (alias for _load_browser_item)."""
+        return self._load_browser_item(track_index, uri)
+
     # Substring markers that point a URI at a likely root. If no marker
     # matches we fall back to the default order, so this is purely an
     # optimisation — never a correctness change.
@@ -1787,8 +1792,31 @@ class AbletonMCP(ControlSurface):
     def _save_project(self):
         """Save the current Live project"""
         try:
-            self._song.save()
-            return {"saved": True}
+            # Try save_current_song on Application (Live 11+)
+            try:
+                self.application().save_current_song()
+                return {"saved": True}
+            except AttributeError:
+                pass
+
+            # Fallback: try Song.save()
+            try:
+                self.song().save()
+                return {"saved": True}
+            except AttributeError:
+                pass
+
+            # Fallback: try save_and_or_rename
+            try:
+                self.song().save_and_or_rename()
+                return {"saved": True, "dialog": True}
+            except AttributeError:
+                pass
+
+            raise RuntimeError(
+                "Save is not available via the Live API in this version. "
+                "Save manually (Ctrl+S) in Live."
+            )
         except Exception as e:
             self.log_message("Error saving project: " + str(e))
             raise

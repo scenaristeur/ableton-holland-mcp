@@ -101,7 +101,7 @@ Buffer Voicemeeter : 1024 samples pour stabilité
 ### Project (NEW)
 | Tool | Description |
 |---|---|
-| `save_project()` | Sauvegarder le projet |
+| `save_project()` | Sauvegarder le projet (non disponible dans Live 12 Lite — sauvegarder manuellement) |
 | `undo()` / `redo()` | Annuler/rétablir |
 
 ## Outils Music Analysis disponibles
@@ -273,11 +273,12 @@ Pour chaque section de la chanson (couplet, refrain, pont, etc.) :
 ## Limitations
 
 - Ableton Live Lite : max 8 pistes
-- Pas d'API pour freeze/flatten, modifier song_length, ou lire les notes MIDI existantes
+- `save_project()` n'est **pas disponible** via l'API Live 12 Lite (ni `Song.save()`, ni `Application.save_current_song()`). Sauvegarder manuellement (Ctrl+S).
 - Premier appel MCP après démarrage opencode peut timeout (~60s)
 - Arrangement API nécessite Remote Script v1314+ (dans `C:\ProgramData\Ableton\Live XX\Resources\MIDI Remote Scripts\AbletonMCP\__init__.py`)
 - `set_arrangement_time(time)` est imprécis : la position réelle peut différer de la valeur demandée (décalage systématique). Contournement : utiliser `start_playback()` puis régler manuellement dans Live, ou capturer à la position courante.
 - `load_instrument_or_effect` peut timeout si le serveur est occupé. Réessayer en réduisant la charge (ne pas lancer plusieurs appels simultanés).
+- Pour déployer le Remote Script, le copier manuellement dans le dossier Ableton pendant qu'Ableton est fermé.
 
 ## Paramètres des devices
 
