@@ -249,5 +249,3 @@ Chaque commande doit catcher les exceptions Live spécifiques et retourner une e
 6. `undo` → doit annuler la dernière opération
 
 
-## 7. Future Explorations.
-Voir pour combiener avec un VCVRack MCP  comme https://community.vcvrack.com/t/mcp-server-let-claude-cursor-build-and-control-your-rack-patches-live/25607

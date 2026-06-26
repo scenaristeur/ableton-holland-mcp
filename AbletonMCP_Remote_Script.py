@@ -280,7 +280,6 @@ class AbletonMCP(ControlSurface):
                 "set_crossfader",
                 "set_groove_amount",
                 # System / Monitoring
-                "show_message",
                 "set_tempo_follower",
                 # Routing
                 "set_track_input_routing",
@@ -474,9 +473,6 @@ class AbletonMCP(ControlSurface):
                         elif command_type == "set_groove_amount":
                             amount = params.get("amount", 0.0)
                             result = self._set_groove_amount(amount)
-                        elif command_type == "show_message":
-                            text = params.get("text", "")
-                            result = self._show_message(text)
                         elif command_type == "set_tempo_follower":
                             enabled = params.get("enabled", False)
                             result = self._set_tempo_follower(enabled)
@@ -2286,15 +2282,6 @@ class AbletonMCP(ControlSurface):
     # System / Monitoring
     # ═══════════════════════════════════════════════════════════════
 
-    def _show_message(self, text):
-        """Show a message in Live's status bar"""
-        try:
-            self.application().show_message(str(text))
-            return {"shown": True, "text": str(text)}
-        except Exception as e:
-            self.log_message("Error showing message: " + str(e))
-            raise
-
     def _get_cpu_load(self):
         """Get CPU usage: average and peak"""
         try:
@@ -2312,7 +2299,7 @@ class AbletonMCP(ControlSurface):
         try:
             app = self.application()
             return {
-                "version_string": app.version_string,
+                "version_string": app.get_version_string(),
                 "major": app.get_major_version(),
                 "minor": app.get_minor_version(),
                 "bugfix": app.get_bugfix_version(),
