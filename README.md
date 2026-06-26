@@ -292,6 +292,9 @@ python dashboard/app.py
 - Customize Ableton Live with the Live API  https://www.youtube.com/watch?v=Hfq-NXEhmzs
 - Ableton free packs https://www.ableton.com/en/packs/#?item_type=free
 - Future Explorations. Voir pour combiener avec un VCVRack MCP  comme https://community.vcvrack.com/t/mcp-server-let-claude-cursor-build-and-control-your-rack-patches-live/25607
+- autre MCP ableton : https://github.com/adamjmurray/producer-pal#readme
+- https://github.com/uisato/ableton-mcp-extended
+
 
 ## Dépannage
 
