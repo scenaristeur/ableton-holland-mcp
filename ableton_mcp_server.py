@@ -364,11 +364,18 @@ def duplicate_clip(track_index: int, clip_index: int) -> dict[str, Any]:
 
 @app.tool()
 def quantize_clip(
-    track_index: int, clip_index: int, amount: float = 1.0
+    track_index: int,
+    clip_index: int,
+    amount: float = 1.0,
+    quantize_to: int = 2,
 ) -> dict[str, Any]:
-    """Quantize a MIDI clip by amount (0.0–1.0)."""
+    """Quantize a MIDI clip. quantize_to: 0=1/4, 1=1/8, 2=1/16, 3=1/32. amount: 0.0–1.0."""
     return _cmd(
-        "quantize_clip", track_index=track_index, clip_index=clip_index, amount=amount
+        "quantize_clip",
+        track_index=track_index,
+        clip_index=clip_index,
+        amount=amount,
+        quantize_to=quantize_to,
     )
 
 

@@ -427,8 +427,9 @@ class AbletonMCP(ControlSurface):
                             track_index = params.get("track_index", 0)
                             clip_index = params.get("clip_index", 0)
                             amount = params.get("amount", 1.0)
+                            quantize_to = params.get("quantize_to", 2)
                             result = self._quantize_clip(
-                                track_index, clip_index, amount
+                                track_index, clip_index, amount, quantize_to
                             )
                         elif command_type == "select_track":
                             track_index = params.get("track_index", 0)
@@ -2021,8 +2022,8 @@ class AbletonMCP(ControlSurface):
             self.log_message("Error duplicating clip: " + str(e))
             raise
 
-    def _quantize_clip(self, track_index, clip_index, amount):
-        """Quantize a MIDI clip by amount (0.0–1.0)"""
+    def _quantize_clip(self, track_index, clip_index, amount, quantize_to=2):
+        """Quantize a MIDI clip. quantize_to: 0=1/4, 1=1/8, 2=1/16, 3=1/32. amount: 0.0–1.0."""
         try:
             if track_index < 0 or track_index >= len(self._song.tracks):
                 raise IndexError("Track index out of range")
@@ -2033,8 +2034,8 @@ class AbletonMCP(ControlSurface):
             if not clip_slot.has_clip:
                 raise Exception("No clip in slot")
             clip = clip_slot.clip
-            clip.quantize(amount)
-            return {"quantized": True, "amount": amount}
+            clip.quantize(int(quantize_to), float(amount))
+            return {"quantized": True, "quantize_to": quantize_to, "amount": amount}
         except Exception as e:
             self.log_message("Error quantizing clip: " + str(e))
             raise
