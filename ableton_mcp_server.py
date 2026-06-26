@@ -489,6 +489,105 @@ def set_groove_amount(amount: float) -> dict[str, Any]:
     return _cmd("set_groove_amount", amount=amount)
 
 
+# ── System / Monitoring ─────────────────────────────────────────────────────
+
+
+@app.tool()
+def show_message(text: str) -> dict[str, Any]:
+    """Show a message in Live's status bar."""
+    return _cmd("show_message", text=text)
+
+
+@app.tool()
+def get_cpu_load() -> dict[str, Any]:
+    """Get CPU usage: average and peak percent."""
+    return _cmd("get_cpu_load")
+
+
+@app.tool()
+def get_live_version() -> dict[str, Any]:
+    """Get Live version info (version string, build ID)."""
+    return _cmd("get_live_version")
+
+
+@app.tool()
+def get_tempo_follower() -> dict[str, Any]:
+    """Get whether tempo follower is enabled."""
+    return _cmd("get_tempo_follower")
+
+
+@app.tool()
+def set_tempo_follower(enabled: bool) -> dict[str, Any]:
+    """Enable/disable the tempo follower."""
+    return _cmd("set_tempo_follower", enabled=enabled)
+
+
+@app.tool()
+def get_control_surfaces() -> dict[str, Any]:
+    """List active control surfaces."""
+    return _cmd("get_control_surfaces")
+
+
+# ── Track Routing ──────────────────────────────────────────────────────────
+
+
+@app.tool()
+def get_track_routing(track_index: int) -> dict[str, Any]:
+    """Get input/output routing info for a track."""
+    return _cmd("get_track_routing", track_index=track_index)
+
+
+@app.tool()
+def set_track_input_routing(
+    track_index: int,
+    routing_type: str,
+    channel: str | None = None,
+) -> dict[str, Any]:
+    """Set input routing for a track by type name (e.g. 'Ext. In', 'Resampling')."""
+    return _cmd(
+        "set_track_input_routing",
+        track_index=track_index,
+        routing_type=routing_type,
+        channel=channel,
+    )
+
+
+@app.tool()
+def set_track_output_routing(
+    track_index: int,
+    routing_type: str,
+    channel: str | None = None,
+) -> dict[str, Any]:
+    """Set output routing for a track by type name (e.g. 'Master', 'Sends Only')."""
+    return _cmd(
+        "set_track_output_routing",
+        track_index=track_index,
+        routing_type=routing_type,
+        channel=channel,
+    )
+
+
+# ── Master Track ───────────────────────────────────────────────────────────
+
+
+@app.tool()
+def get_master_track() -> dict[str, Any]:
+    """Get master track info: volume, pan."""
+    return _cmd("get_master_track")
+
+
+@app.tool()
+def set_master_volume(value: float) -> dict[str, Any]:
+    """Set master volume (0.0–1.0)."""
+    return _cmd("set_master_volume", value=value)
+
+
+@app.tool()
+def set_master_panning(value: float) -> dict[str, Any]:
+    """Set master panning (-1.0–1.0)."""
+    return _cmd("set_master_panning", value=value)
+
+
 # ── Entrypoint ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

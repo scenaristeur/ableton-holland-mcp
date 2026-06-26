@@ -247,3 +247,7 @@ Chaque commande doit catcher les exceptions Live spécifiques et retourner une e
 4. `delete_session_clip` → doit supprimer le clip et confirmer
 5. `create_scene` → doit créer une scene et retourner son index
 6. `undo` → doit annuler la dernière opération
+
+
+## 7. Future Explorations.
+Voir pour combiener avec un VCVRack MCP  comme https://community.vcvrack.com/t/mcp-server-let-claude-cursor-build-and-control-your-rack-patches-live/25607

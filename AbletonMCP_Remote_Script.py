@@ -279,6 +279,15 @@ class AbletonMCP(ControlSurface):
                 "set_signature",
                 "set_crossfader",
                 "set_groove_amount",
+                # System / Monitoring
+                "show_message",
+                "set_tempo_follower",
+                # Routing
+                "set_track_input_routing",
+                "set_track_output_routing",
+                # Master
+                "set_master_volume",
+                "set_master_panning",
             ]:
                 # Use a thread-safe approach with a response queue
                 response_queue = queue.Queue()
@@ -465,6 +474,32 @@ class AbletonMCP(ControlSurface):
                         elif command_type == "set_groove_amount":
                             amount = params.get("amount", 0.0)
                             result = self._set_groove_amount(amount)
+                        elif command_type == "show_message":
+                            text = params.get("text", "")
+                            result = self._show_message(text)
+                        elif command_type == "set_tempo_follower":
+                            enabled = params.get("enabled", False)
+                            result = self._set_tempo_follower(enabled)
+                        elif command_type == "set_track_input_routing":
+                            track_index = params.get("track_index", 0)
+                            routing_type = params.get("routing_type", "")
+                            channel = params.get("channel", None)
+                            result = self._set_track_input_routing(
+                                track_index, routing_type, channel
+                            )
+                        elif command_type == "set_track_output_routing":
+                            track_index = params.get("track_index", 0)
+                            routing_type = params.get("routing_type", "")
+                            channel = params.get("channel", None)
+                            result = self._set_track_output_routing(
+                                track_index, routing_type, channel
+                            )
+                        elif command_type == "set_master_volume":
+                            value = params.get("value", 0.85)
+                            result = self._set_master_volume(value)
+                        elif command_type == "set_master_panning":
+                            value = params.get("value", 0.0)
+                            result = self._set_master_panning(value)
 
                         # Put the result in the queue
                         response_queue.put({"status": "success", "result": result})
@@ -555,6 +590,22 @@ class AbletonMCP(ControlSurface):
                 response["result"] = self._get_crossfader()
             elif command_type == "get_groove_amount":
                 response["result"] = self._get_groove_amount()
+            # ── System / Monitoring ────────────────────────────────────────────
+            elif command_type == "get_cpu_load":
+                response["result"] = self._get_cpu_load()
+            elif command_type == "get_live_version":
+                response["result"] = self._get_live_version()
+            elif command_type == "get_tempo_follower":
+                response["result"] = self._get_tempo_follower()
+            elif command_type == "get_control_surfaces":
+                response["result"] = self._get_control_surfaces()
+            # ── Routing ────────────────────────────────────────────────────────
+            elif command_type == "get_track_routing":
+                track_index = params.get("track_index", 0)
+                response["result"] = self._get_track_routing(track_index)
+            # ── Master track ───────────────────────────────────────────────────
+            elif command_type == "get_master_track":
+                response["result"] = self._get_master_track()
             else:
                 response["status"] = "error"
                 response["message"] = "Unknown command: " + command_type
@@ -2229,4 +2280,191 @@ class AbletonMCP(ControlSurface):
             return {"groove_amount": float(amount)}
         except Exception as e:
             self.log_message("Error setting groove amount: " + str(e))
+            raise
+
+    # ═══════════════════════════════════════════════════════════════
+    # System / Monitoring
+    # ═══════════════════════════════════════════════════════════════
+
+    def _show_message(self, text):
+        """Show a message in Live's status bar"""
+        try:
+            self.application().show_message(str(text))
+            return {"shown": True, "text": str(text)}
+        except Exception as e:
+            self.log_message("Error showing message: " + str(e))
+            raise
+
+    def _get_cpu_load(self):
+        """Get CPU usage: average and peak"""
+        try:
+            app = self.application()
+            return {
+                "average_percent": app.average_process_usage,
+                "peak_percent": app.peak_process_usage,
+            }
+        except Exception as e:
+            self.log_message("Error getting CPU load: " + str(e))
+            raise
+
+    def _get_live_version(self):
+        """Get Live version info"""
+        try:
+            app = self.application()
+            return {
+                "version_string": app.version_string,
+                "major": app.get_major_version(),
+                "minor": app.get_minor_version(),
+                "bugfix": app.get_bugfix_version(),
+                "build_id": app.get_build_id(),
+            }
+        except Exception as e:
+            self.log_message("Error getting Live version: " + str(e))
+            raise
+
+    def _get_tempo_follower(self):
+        """Get whether tempo follower is enabled"""
+        try:
+            return {"enabled": self._song.tempo_follower_enabled}
+        except Exception as e:
+            self.log_message("Error getting tempo follower: " + str(e))
+            raise
+
+    def _set_tempo_follower(self, enabled):
+        """Enable/disable tempo follower"""
+        try:
+            self._song.tempo_follower_enabled = bool(enabled)
+            return {"enabled": bool(enabled)}
+        except Exception as e:
+            self.log_message("Error setting tempo follower: " + str(e))
+            raise
+
+    def _get_control_surfaces(self):
+        """List active control surfaces"""
+        try:
+            app = self.application()
+            cs_list = app.control_surfaces
+            result = []
+            for i, cs in enumerate(cs_list):
+                result.append({"slot": i, "active": cs is not None})
+            return {"control_surfaces": result, "count": len(result)}
+        except Exception as e:
+            self.log_message("Error getting control surfaces: " + str(e))
+            raise
+
+    # ═══════════════════════════════════════════════════════════════
+    # Track routing
+    # ═══════════════════════════════════════════════════════════════
+
+    def _get_track_routing(self, track_index):
+        """Get input/output routing for a track"""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            return {
+                "input_routing": track.current_input_routing,
+                "input_sub_routing": track.current_input_sub_routing,
+                "available_input_types": [
+                    rt.display_name for rt in track.available_input_routing_types
+                ],
+                "available_input_channels": [
+                    rc.display_name for rc in track.available_input_routing_channels
+                ],
+                "output_routing": track.current_output_routing,
+                "output_sub_routing": track.current_output_sub_routing,
+                "available_output_types": [
+                    rt.display_name for rt in track.available_output_routing_types
+                ],
+                "available_output_channels": [
+                    rc.display_name for rc in track.available_output_routing_channels
+                ],
+            }
+        except Exception as e:
+            self.log_message("Error getting track routing: " + str(e))
+            raise
+
+    def _set_track_input_routing(self, track_index, routing_type, channel=None):
+        """Set input routing for a track by type name"""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            # Find matching routing type
+            for rt in track.available_input_routing_types:
+                if rt.display_name == routing_type:
+                    track.input_routing_type = rt
+                    break
+            else:
+                raise Exception("Input routing type not found: " + routing_type)
+            if channel is not None:
+                for rc in track.available_input_routing_channels:
+                    if rc.display_name == channel:
+                        track.input_routing_channel = rc
+                        break
+            return {
+                "input_routing": track.current_input_routing,
+                "input_sub_routing": track.current_input_sub_routing,
+            }
+        except Exception as e:
+            self.log_message("Error setting input routing: " + str(e))
+            raise
+
+    def _set_track_output_routing(self, track_index, routing_type, channel=None):
+        """Set output routing for a track by type name"""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            for rt in track.available_output_routing_types:
+                if rt.display_name == routing_type:
+                    track.output_routing_type = rt
+                    break
+            else:
+                raise Exception("Output routing type not found: " + routing_type)
+            if channel is not None:
+                for rc in track.available_output_routing_channels:
+                    if rc.display_name == channel:
+                        track.output_routing_channel = rc
+                        break
+            return {
+                "output_routing": track.current_output_routing,
+                "output_sub_routing": track.current_output_sub_routing,
+            }
+        except Exception as e:
+            self.log_message("Error setting output routing: " + str(e))
+            raise
+
+    # ═══════════════════════════════════════════════════════════════
+    # Master track
+    # ═══════════════════════════════════════════════════════════════
+
+    def _get_master_track(self):
+        """Get master track info: volume, pan"""
+        try:
+            master = self._song.master_track
+            return {
+                "volume": master.mixer_device.volume.value,
+                "panning": master.mixer_device.panning.value,
+            }
+        except Exception as e:
+            self.log_message("Error getting master track: " + str(e))
+            raise
+
+    def _set_master_volume(self, value):
+        """Set master volume (0.0–1.0)"""
+        try:
+            self._song.master_track.mixer_device.volume.value = float(value)
+            return {"volume": float(value)}
+        except Exception as e:
+            self.log_message("Error setting master volume: " + str(e))
+            raise
+
+    def _set_master_panning(self, value):
+        """Set master panning (-1.0–1.0)"""
+        try:
+            self._song.master_track.mixer_device.panning.value = float(value)
+            return {"panning": float(value)}
+        except Exception as e:
+            self.log_message("Error setting master panning: " + str(e))
             raise
