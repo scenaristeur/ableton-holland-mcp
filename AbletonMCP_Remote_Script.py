@@ -288,6 +288,11 @@ class AbletonMCP(ControlSurface):
                 # Master
                 "set_master_volume",
                 "set_master_panning",
+                # Clip envelopes (modulation)
+                "get_clip_envelope",
+                "set_clip_envelope",
+                "set_arrangement_clip_envelope",
+                "set_track_volume",
             ]:
                 # Use a thread-safe approach with a response queue
                 response_queue = queue.Queue()
@@ -504,6 +509,34 @@ class AbletonMCP(ControlSurface):
                         elif command_type == "set_master_panning":
                             value = params.get("value", 0.0)
                             result = self._set_master_panning(value)
+                        elif command_type == "set_track_volume":
+                            track_index = params.get("track_index", 0)
+                            value = params.get("value", 0.85)
+                            result = self._set_track_volume(track_index, value)
+                        # ── Clip Envelopes (modulation) ─────────────────────────
+                        elif command_type == "get_clip_envelope":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            target = params.get("target", "volume")
+                            result = self._get_clip_envelope(
+                                track_index, clip_index, target
+                            )
+                        elif command_type == "set_clip_envelope":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            target = params.get("target", "volume")
+                            points = params.get("points", [])
+                            result = self._set_clip_envelope(
+                                track_index, clip_index, target, points
+                            )
+                        elif command_type == "set_arrangement_clip_envelope":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            target = params.get("target", "volume")
+                            points = params.get("points", [])
+                            result = self._set_arrangement_clip_envelope(
+                                track_index, clip_index, target, points
+                            )
 
                         # Put the result in the queue
                         response_queue.put({"status": "success", "result": result})
@@ -2488,4 +2521,179 @@ class AbletonMCP(ControlSurface):
             return {"panning": float(value)}
         except Exception as e:
             self.log_message("Error setting master panning: " + str(e))
+            raise
+
+    def _set_track_volume(self, track_index, value):
+        """Set a track's volume (0.0–1.0)"""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            track.mixer_device.volume.value = float(value)
+            return {"track_index": track_index, "volume": float(value)}
+        except Exception as e:
+            self.log_message("Error setting track volume: " + str(e))
+            raise
+
+    # ═══════════════════════════════════════════════════════════════
+    # Clip Envelopes (Modulation)
+    # ═══════════════════════════════════════════════════════════════
+
+    def _resolve_envelope_target(self, track, target):
+        """Resolve a target string to a DeviceParameter for modulation envelopes.
+
+        Supported targets:
+          "volume"              → track.mixer_device.volume
+          "panning"             → track.mixer_device.panning
+          "send_N"              → track.mixer_device.sends[N]
+          "device_N_PARAMNAME"  → device[N].parameters[PARAMNAME]
+        """
+        if target == "volume":
+            return track.mixer_device.volume
+        elif target == "panning":
+            return track.mixer_device.panning
+        elif target.startswith("send_"):
+            parts = target.split("_")
+            if len(parts) >= 2:
+                idx = int(parts[1])
+                if idx < len(track.mixer_device.sends):
+                    return track.mixer_device.sends[idx]
+                raise IndexError(f"Send index {idx} out of range")
+        elif target.startswith("device_"):
+            # Format: device_INDEX_PARAMNAME
+            parts = target.split("_", 2)
+            if len(parts) >= 3:
+                dev_idx = int(parts[1])
+                param_name = parts[2]
+                if dev_idx < len(track.devices):
+                    device = track.devices[dev_idx]
+                    for param in device.parameters:
+                        if param.name == param_name:
+                            return param
+                    raise ValueError(
+                        f"Parameter '{param_name}' not found on device {dev_idx}"
+                    )
+                raise IndexError(f"Device index {dev_idx} out of range")
+        raise ValueError(f"Unknown envelope target: {target}")
+
+    def _get_clip_envelope(self, track_index, clip_index, target, is_arrangement=True):
+        """Read envelope points from an arrangement clip's modulation envelope."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            param = self._resolve_envelope_target(track, target)
+            clips = list(track.arrangement_clips)
+            if clip_index < 0 or clip_index >= len(clips):
+                raise IndexError("Arrangement clip index out of range")
+            clip = clips[clip_index]
+            env = clip.automation_envelope(param)
+            if env is None:
+                return {"points": []}
+            points = []
+            for p in env.points:
+                points.append({"time": float(p[0]), "value": float(p[1])})
+            return {"points": points}
+        except Exception as e:
+            self.log_message("Error getting clip envelope: " + str(e))
+            raise
+
+    def _set_clip_envelope(
+        self, track_index, clip_index, target, points, is_arrangement=True
+    ):
+        """Set modulation envelope points on an arrangement clip."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            param = self._resolve_envelope_target(track, target)
+            clips = list(track.arrangement_clips)
+            if clip_index < 0 or clip_index >= len(clips):
+                raise IndexError("Arrangement clip index out of range")
+            clip = clips[clip_index]
+            # Remove existing envelope if any
+            clip.clear_envelope(param)
+            if not points:
+                return {"point_count": 0}
+            # Create fresh envelope
+            env = clip.create_automation_envelope(param)
+            for p in points:
+                t = float(p["time"])
+                v = float(p["value"])
+                d = float(p.get("duration", 0.0))
+                env.insert_step(t, v, d)
+            return {"point_count": len(points)}
+        except Exception as e:
+            self.log_message("Error setting clip envelope: " + str(e))
+            raise
+
+    def _set_arrangement_clip_envelope(self, track_index, clip_index, target, points):
+        """Set modulation envelope on an arrangement clip via session-clip workaround.
+
+        clip.automation_envelope() only works on session clips, so we:
+          1. Read notes from the arrangement clip
+          2. Create a temp session clip with those notes
+          3. Apply the envelope to the session clip
+          4. Delete the original arrangement clip
+          5. Duplicate the session clip to arrangement
+          6. Delete the temp session clip
+        """
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            param = self._resolve_envelope_target(track, target)
+            clips = list(track.arrangement_clips)
+            if clip_index < 0 or clip_index >= len(clips):
+                raise IndexError("Arrangement clip index out of range")
+            src_clip = clips[clip_index]
+            if not src_clip.is_midi_clip:
+                raise Exception("Clip is not a MIDI clip")
+
+            # 1. Read notes and metadata from arrangement clip
+            length = src_clip.length
+            start_time = src_clip.start_time
+            raw_notes = src_clip.get_notes(0.0, 0, length, 127)
+            live_notes = tuple(raw_notes)
+
+            # 2. Find an empty session clip slot
+            temp_slot = None
+            for i in range(len(track.clip_slots)):
+                if not track.clip_slots[i].has_clip:
+                    temp_slot = track.clip_slots[i]
+                    temp_idx = i
+                    break
+            if temp_slot is None:
+                raise Exception("No empty session clip slot available")
+
+            # 3. Create temp session clip with the same notes
+            temp_slot.create_clip(length)
+            if live_notes:
+                temp_slot.clip.set_notes(live_notes)
+
+            # 4. Apply envelope to the session clip
+            if points:
+                env = temp_slot.clip.create_automation_envelope(param)
+                for p in points:
+                    t = float(p["time"])
+                    v = float(p["value"])
+                    d = float(p.get("duration", 0.0))
+                    env.insert_step(t, v, d)
+
+            # 5. Delete original arrangement clip
+            track.delete_clip(src_clip)
+
+            # 6. Duplicate session clip to arrangement
+            track.duplicate_clip_to_arrangement(temp_slot.clip, float(start_time))
+
+            # 7. Delete temp session clip
+            temp_slot.delete_clip()
+
+            return {
+                "point_count": len(points),
+                "start_time": start_time,
+                "length": length,
+            }
+        except Exception as e:
+            self.log_message("Error setting arrangement clip envelope: " + str(e))
             raise

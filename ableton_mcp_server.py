@@ -601,6 +601,71 @@ def set_master_panning(value: float) -> dict[str, Any]:
     return _cmd("set_master_panning", value=value)
 
 
+@app.tool()
+def set_track_volume(track_index: int, value: float) -> dict[str, Any]:
+    """Set a track's volume (0.0–1.0)."""
+    return _cmd("set_track_volume", track_index=track_index, value=value)
+
+
+# ── Clip Envelopes (Modulation) ──────────────────────────────────────────────
+
+
+@app.tool()
+def get_clip_envelope(
+    track_index: int, clip_index: int, target: str = "volume"
+) -> dict[str, Any]:
+    """Read modulation envelope points from an arrangement clip.
+    target: 'volume', 'panning', 'send_N' (e.g. 'send_0' for reverb send)."""
+    return _cmd(
+        "get_clip_envelope",
+        track_index=track_index,
+        clip_index=clip_index,
+        target=target,
+    )
+
+
+@app.tool()
+def set_clip_envelope(
+    track_index: int,
+    clip_index: int,
+    target: str = "volume",
+    points: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Set modulation envelope points on an arrangement clip.
+    Each point: {'time': float, 'value': float}.
+    target: 'volume', 'panning', 'send_N'."""
+    if points is None:
+        points = []
+    return _cmd(
+        "set_clip_envelope",
+        track_index=track_index,
+        clip_index=clip_index,
+        target=target,
+        points=points,
+    )
+
+
+@app.tool()
+def set_arrangement_clip_envelope(
+    track_index: int,
+    clip_index: int,
+    target: str = "volume",
+    points: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Set modulation envelope on an arrangement clip via session-clip workaround.
+    Each point: {'time': float, 'value': float}.
+    target: 'volume', 'panning', 'send_N', 'device_N_PARAMNAME'."""
+    if points is None:
+        points = []
+    return _cmd(
+        "set_arrangement_clip_envelope",
+        track_index=track_index,
+        clip_index=clip_index,
+        target=target,
+        points=points,
+    )
+
+
 # ── Entrypoint ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
