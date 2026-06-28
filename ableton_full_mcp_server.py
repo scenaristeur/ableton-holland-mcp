@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 import socket
 import time
@@ -675,6 +676,42 @@ async def capture_ableton(
     return result
 
 
+async def _capture_async(
+    output_name: str,
+    duration_sec: float,
+) -> str | None:
+    """Capture audio using asyncio.sleep (needed for callback on Windows)."""
+    if CABLE_DEVICE_ID is None:
+        return None
+    wav_path = str(ANALYSES_DIR / f"{output_name}.wav")
+    recorded = []
+
+    def callback(indata, frames, time_info, status):
+        if status:
+            import warnings
+
+            warnings.warn(f"Capture status: {status}")
+        recorded.append(indata.copy())
+
+    device_info = sd.query_devices(CABLE_DEVICE_ID)
+    samplerate = int(device_info["default_samplerate"])
+
+    with sd.InputStream(
+        device=CABLE_DEVICE_ID,
+        channels=2,
+        samplerate=samplerate,
+        callback=callback,
+    ):
+        await asyncio.sleep(duration_sec)
+
+    if not recorded:
+        return None
+
+    audio = np.concatenate(recorded, axis=0)
+    sf.write(wav_path, audio, samplerate)
+    return wav_path
+
+
 @app.tool()
 async def capture_at_position(
     position_beats: float,
@@ -687,96 +724,43 @@ async def capture_at_position(
     Workflow:
     1. stop_playback (Ableton)
     2. switch_to_arrangement_view (Ableton)
-    3. capture_ableton (Music Analysis) - starts recording
-    4. start_playback_at (Ableton) - starts playing at position
-    5. wait for duration
-    6. stop_playback (Ableton)
-    7. return capture result
+    3. start_playback_at (Ableton)
+    4. capture_ableton (blocking)
+    5. stop_playback
+    6. load + return
     """
     if output_name is None:
         output_name = (
             f"capture_pos{position_beats:.0f}_{datetime.now().strftime('%H%M%S')}"
         )
 
-    log = []
+    _cmd("stop_playback")
+    time.sleep(0.25)
+    _cmd("switch_to_arrangement_view")
+    time.sleep(0.25)
 
-    def debug(msg: str):
-        log.append(msg)
-        print(f"[CAPTURE] {msg}", file=sys.stderr, flush=True)
+    playback_result = _cmd("start_playback_at", time=position_beats)
+    time.sleep(0.3)
 
-    try:
-        # 1. Stop playback
-        debug("Step 1: stop_playback")
-        stop1 = _cmd("stop_playback")
-        debug(f"  stop_playback result: {stop1}")
-        await asyncio.sleep(0.3)
+    wav_path = await _capture_async(output_name, duration_sec)
+    if wav_path is None:
+        return {"error": "Capture failed (no audio or no CABLE device)"}
 
-        # Check if actually stopped
-        info = _cmd("get_session_info")
-        debug(
-            f"  after stop - is_playing={info.get('is_playing')}, time={info.get('current_song_time')}"
-        )
+    _cmd("stop_playback")
+    time.sleep(0.25)
+    session_info = _cmd("get_session_info")
 
-        # 2. Switch to arrangement view
-        debug("Step 2: switch_to_arrangement_view")
-        arng = _cmd("switch_to_arrangement_view")
-        debug(f"  switch_to_arrangement_view result: {arng}")
-        await asyncio.sleep(0.3)
+    capture_result = load(wav_path)
+    capture_result["wav_path"] = wav_path
 
-        # 3. Start capture (async - blocks for duration_sec)
-        debug(f"Step 3: start capture (duration={duration_sec}s, output={output_name})")
-        capture_task = asyncio.create_task(
-            capture_ableton(duration=duration_sec, output_name=output_name)
-        )
-
-        # Small delay to ensure capture is armed
-        await asyncio.sleep(0.1)
-
-        # 4. Start playback at position (atomic)
-        debug(f"Step 4: start_playback_at({position_beats})")
-        playback_result = _cmd("start_playback_at", time=position_beats)
-        debug(f"  start_playback_at result: {playback_result}")
-
-        # Check playback position
-        info2 = _cmd("get_session_info")
-        debug(
-            f"  after playback - is_playing={info2.get('is_playing')}, time={info2.get('current_song_time')}"
-        )
-
-        # 5. Wait for capture to complete
-        debug(f"Step 5: waiting for capture ({duration_sec}s)...")
-        capture_result = await asyncio.wait_for(capture_task, timeout=duration_sec + 5)
-        debug("  capture completed")
-
-        # 6. Stop playback
-        debug("Step 6: stop_playback")
-        stop2 = _cmd("stop_playback")
-        debug(f"  stop_playback result: {stop2}")
-        await asyncio.sleep(0.3)
-
-        # Verify position
-        session_info = _cmd("get_session_info")
-        debug(
-            f"  final - is_playing={session_info.get('is_playing')}, time={session_info.get('current_song_time')}"
-        )
-
-        # Return combined result
-        return {
-            "capture_position_beats": position_beats,
-            "capture_duration_sec": duration_sec,
-            "y_path": capture_result["y_path"],
-            "wav_path": capture_result["wav_path"],
-            "final_song_time": session_info.get("current_song_time"),
-            "debug_log": log,
-        }
-
-    except Exception as e:
-        debug(f"ERROR: {e}")
-        import traceback
-
-        debug(traceback.format_exc())
-        _cmd("stop_playback")
-        return {"error": str(e), "debug_log": log}
+    return {
+        "capture_position_beats": position_beats,
+        "capture_duration_sec": duration_sec,
+        "y_path": capture_result.get("y_path"),
+        "wav_path": wav_path,
+        "playback_result": playback_result,
+        "final_song_time": session_info.get("current_song_time"),
+    }
 
 
 @app.tool()
