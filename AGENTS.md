@@ -38,6 +38,7 @@ Buffer Voicemeeter : 1024 samples pour stabilité
 | `get_track_info(index)` | Piste : nom, clips, devices, volume, pan, mute/solo/arm |
 | `set_tempo(bpm)` | Changer le tempo |
 | `start_playback()` / `stop_playback()` | Démarrer/arrêter |
+| `start_playback_at(time)` | Positionner ET démarrer atomiquement (évite le saut de playhead) |
 | `set_metronome(value)` / `get_metronome()` | Métronome on/off |
 | `set_session_record(value)` / `get_session_record()` | Session record on/off |
 | `nudge_up()` / `nudge_down()` | Nudge tempo fin |
@@ -168,26 +169,39 @@ switch_to_arrangement_view → duplicate_to_arrangement × N → get_arrangement
 ```
 
 ### Analyser le mix (workflow obligatoire)
-**Important :** Sans loop dans l'arrangement, Ableton ne boucle pas — le playhead avance jusqu'à la fin et s'arrête. Toujours faire :
+**Important :** `set_arrangement_time` retourne des valeurs obsolètes (lit l'ancienne position). Toujours vérifier avec `get_session_info`.  
+**Important :** `start_playback_at(time)` combine positionnement + lecture atomiquement (évite le saut de playhead). Préférer cette méthode.
 
-1. `stop_playback()` — stopper la lecture
-2. `set_arrangement_time(0)` — remettre le playhead au début
-3. `capture_ableton(duration=N)` **ET** `start_playback()` **en parallèle** — la capture commence à enregistrer, le playback démarre en même temps
-4. La capture se termine automatiquement après N secondes → retourne `y_path`
-5. `stop_playback()` — stopper la lecture
-6. `set_arrangement_time(0)` — remettre le playhead à zéro
-7. `analyze_full(y_path)` — analyser
+#### Workflow standard (capture depuis le début)
+
+1. `switch_to_arrangement_view()` — vue Arrangement requise
+2. `start_playback_at(0)` — positionne ET démarre atomiquement
+3. `get_session_info()` — vérifier position
+4. `capture_ableton(duration=N)` — capturer (bloquant N secondes)
+5. `stop_playback()` — stopper
+6. `analyze_full(y_path)` — analyser
 
 ```python
-# Workflow standard
+# Workflow standard depuis le début
 stop_playback()
-set_arrangement_time(0)          # remet à 0
-# Appels parallèles : capture commence, puis playback démarre
-capture_ableton(duration=15)     # blocant ~15s
-start_playback()                 # en parallèle
-# ← ici la capture est finie
+switch_to_arrangement_view()
+start_playback_at(0)                     # positionne + démarre atomiquement
+get_session_info()                       # vérifier position
+capture_ableton(duration=15)             # capturer
 stop_playback()
-set_arrangement_time(0)
+analyze_full(y_path)
+```
+
+#### Workflow capture à une position précise (ex: couplet à beat 32)
+
+```python
+# Workflow position précise
+stop_playback()
+switch_to_arrangement_view()             # Obligatoire !
+start_playback_at(desired_time)          # ex: 32, atomique = pas de saut
+get_session_info()                       # vérifier avant capture
+capture_ableton(duration=N)              # capturer (bloquant)
+stop_playback()
 analyze_full(y_path)
 ```
 
@@ -311,7 +325,7 @@ Pour chaque section de la chanson (couplet, refrain, pont, etc.) :
 - `save_project()` n'est **pas disponible** via l'API Live 12 Lite (ni `Song.save()`, ni `Application.save_current_song()`). Sauvegarder manuellement (Ctrl+S).
 - Premier appel MCP après démarrage opencode peut timeout (~60s)
 - Arrangement API nécessite Remote Script v1314+ (dans `C:\ProgramData\Ableton\Live XX\Resources\MIDI Remote Scripts\AbletonMCP\__init__.py`)
-- `set_arrangement_time(time)` est imprécis : la position réelle peut différer de la valeur demandée (décalage systématique). Contournement : utiliser `start_playback()` puis régler manuellement dans Live, ou capturer à la position courante.
+- `set_arrangement_time(time)` est imprécis : la position réelle peut différer de la valeur demandée (décalage systématique). Contournement : utiliser `start_playback_at(time)` qui combine positionnement + démarrage atomiquement.
 - `load_instrument_or_effect` peut timeout si le serveur est occupé. Réessayer en réduisant la charge (ne pas lancer plusieurs appels simultanés).
 - Pour déployer le Remote Script, le copier manuellement dans le dossier Ableton pendant qu'Ableton est fermé.
 

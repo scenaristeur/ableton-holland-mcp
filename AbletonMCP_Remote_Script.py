@@ -239,6 +239,7 @@ class AbletonMCP(ControlSurface):
                 "fire_clip",
                 "stop_clip",
                 "start_playback",
+                "start_playback_at",
                 "stop_playback",
                 "load_instrument_or_effect",
                 "load_browser_item",
@@ -345,6 +346,9 @@ class AbletonMCP(ControlSurface):
                             result = self._stop_clip(track_index, clip_index)
                         elif command_type == "start_playback":
                             result = self._start_playback()
+                        elif command_type == "start_playback_at":
+                            time_val = params.get("time", 0.0)
+                            result = self._start_playback_at(time_val)
                         elif command_type == "stop_playback":
                             result = self._stop_playback()
                         elif command_type == "load_instrument_or_effect":
@@ -991,6 +995,19 @@ class AbletonMCP(ControlSurface):
             return result
         except Exception as e:
             self.log_message("Error starting playback: " + str(e))
+            raise
+
+    def _start_playback_at(self, time_val):
+        """Set arrangement time and start playback atomically (same main-thread call)"""
+        try:
+            self._song.current_song_time = float(time_val)
+            self._song.start_playing()
+            return {
+                "current_song_time": self._song.current_song_time,
+                "playing": self._song.is_playing,
+            }
+        except Exception as e:
+            self.log_message("Error starting playback at time: " + str(e))
             raise
 
     def _stop_playback(self):

@@ -90,6 +90,12 @@ def start_playback() -> dict[str, Any]:
 
 
 @app.tool()
+def start_playback_at(time: float) -> dict[str, Any]:
+    """Set arrangement time and start playback atomically (avoids playhead jump)."""
+    return _cmd("start_playback_at", time=time)
+
+
+@app.tool()
 def stop_playback() -> dict[str, Any]:
     """Stop playback."""
     return _cmd("stop_playback")
