@@ -133,7 +133,7 @@ def _detect_key_from_chroma(chroma: np.ndarray) -> dict:
 def load(path: str) -> dict:
     """Load audio file and return y_path."""
     audio, sr = sf.read(path)
-    y = librosa.to_mono(audio) if audio.ndim > 1 else audio
+    y = np.mean(audio, axis=1) if audio.ndim > 1 else audio
     y = librosa.util.normalize(y)
     y_path = str(ANALYSES_DIR / f"{Path(path).stem}_y.csv")
     pd.DataFrame(y).to_csv(y_path, header=False, index=False)
@@ -676,11 +676,8 @@ async def capture_ableton(
     return result
 
 
-async def _capture_async(
-    output_name: str,
-    duration_sec: float,
-) -> str | None:
-    """Capture audio using asyncio.sleep (needed for callback on Windows)."""
+async def _record_wav(output_name: str, duration_sec: float) -> str | None:
+    """Record from VB-Cable for duration_sec. Returns wav_path or None."""
     if CABLE_DEVICE_ID is None:
         return None
     wav_path = str(ANALYSES_DIR / f"{output_name}.wav")
@@ -693,23 +690,41 @@ async def _capture_async(
             warnings.warn(f"Capture status: {status}")
         recorded.append(indata.copy())
 
-    device_info = sd.query_devices(CABLE_DEVICE_ID)
-    samplerate = int(device_info["default_samplerate"])
+    dev = sd.query_devices(CABLE_DEVICE_ID)
+    sr = int(dev["default_samplerate"])
 
     with sd.InputStream(
-        device=CABLE_DEVICE_ID,
-        channels=2,
-        samplerate=samplerate,
-        callback=callback,
+        device=CABLE_DEVICE_ID, channels=2, samplerate=sr, callback=callback
     ):
         await asyncio.sleep(duration_sec)
 
     if not recorded:
         return None
 
-    audio = np.concatenate(recorded, axis=0)
-    sf.write(wav_path, audio, samplerate)
+    sf.write(wav_path, np.concatenate(recorded, axis=0), sr)
     return wav_path
+
+
+def _ableton_stop_and_seek(position_beats: float) -> dict:
+    """Stop → switch → start_playback_at (start first, then set time)."""
+    _cmd("stop_playback")
+    for _ in range(30):
+        if not _cmd("get_session_info").get("is_playing"):
+            break
+        time.sleep(0.1)
+
+    _cmd("switch_to_arrangement_view")
+    time.sleep(0.3)
+
+    _cmd("start_playback_at", time=position_beats)
+    time.sleep(0.3)
+    info = _cmd("get_session_info")
+
+    return {
+        "requested": position_beats,
+        "position": info.get("current_song_time"),
+        "is_playing": info.get("is_playing"),
+    }
 
 
 @app.tool()
@@ -722,45 +737,28 @@ async def capture_at_position(
     Atomic capture at arrangement position.
 
     Workflow:
-    1. stop_playback (Ableton)
-    2. switch_to_arrangement_view (Ableton)
-    3. start_playback_at (Ableton)
-    4. capture_ableton (blocking)
-    5. stop_playback
-    6. load + return
+    stop → switch → start_playback_at → record (blocking) → stop → load
     """
     if output_name is None:
-        output_name = (
-            f"capture_pos{position_beats:.0f}_{datetime.now().strftime('%H%M%S')}"
-        )
+        output_name = f"cap_{position_beats:.0f}b_{datetime.now().strftime('%H%M%S')}"
 
-    _cmd("stop_playback")
-    time.sleep(0.25)
-    _cmd("switch_to_arrangement_view")
-    time.sleep(0.25)
+    seek = _ableton_stop_and_seek(position_beats)
 
-    playback_result = _cmd("start_playback_at", time=position_beats)
-    time.sleep(0.3)
-
-    wav_path = await _capture_async(output_name, duration_sec)
+    wav_path = await _record_wav(output_name, duration_sec)
     if wav_path is None:
-        return {"error": "Capture failed (no audio or no CABLE device)"}
+        return {"error": "Capture failed", "seek": seek}
 
     _cmd("stop_playback")
-    time.sleep(0.25)
-    session_info = _cmd("get_session_info")
+    time.sleep(0.3)
+    end = _cmd("get_session_info")
 
-    capture_result = load(wav_path)
-    capture_result["wav_path"] = wav_path
-
-    return {
-        "capture_position_beats": position_beats,
-        "capture_duration_sec": duration_sec,
-        "y_path": capture_result.get("y_path"),
-        "wav_path": wav_path,
-        "playback_result": playback_result,
-        "final_song_time": session_info.get("current_song_time"),
-    }
+    result = load(wav_path)
+    result["wav_path"] = wav_path
+    result["position_beats"] = position_beats
+    result["duration_sec"] = duration_sec
+    result["seek"] = seek
+    result["end_song_time"] = end.get("current_song_time")
+    return result
 
 
 @app.tool()
@@ -769,22 +767,16 @@ async def capture_and_analyze(
     duration_sec: float = 10.0,
     output_name: str | None = None,
 ) -> dict:
-    """
-    Capture at position and analyze in one call.
-    """
-    capture_result = await capture_at_position(
+    """Capture at position and analyze in one call."""
+    cap = await capture_at_position(
         position_beats=position_beats,
         duration_sec=duration_sec,
         output_name=output_name,
     )
-
-    y_path = capture_result["y_path"]
-    analysis = analyze_full(y_path)
-
-    return {
-        **capture_result,
-        **analysis,
-    }
+    if "error" in cap:
+        return cap
+    analysis = analyze_full(cap["y_path"])
+    return {**cap, **analysis}
 
 
 @app.tool()

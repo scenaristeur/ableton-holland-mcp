@@ -998,10 +998,10 @@ class AbletonMCP(ControlSurface):
             raise
 
     def _start_playback_at(self, time_val):
-        """Set arrangement time and start playback atomically (same main-thread call)"""
+        """Start playback first, THEN jump to position (Live resets time on start_playing)."""
         try:
-            self._song.current_song_time = float(time_val)
             self._song.start_playing()
+            self._song.current_song_time = float(time_val)
             return {
                 "current_song_time": self._song.current_song_time,
                 "playing": self._song.is_playing,
