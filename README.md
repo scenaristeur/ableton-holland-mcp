@@ -116,70 +116,115 @@ Le script se trouve aussi dans le dépôt GitHub original : [ahujasid/ableton-mc
 ```json
 {
   "mcp": {
-    "ableton-mcp": {
+    "ableton-full": {
       "type": "local",
-      "command": ["uvx", "ableton-mcp"],
-      "enabled": true
-    },
-    "music-analysis": {
-      "type": "local",
-      "command": [".venv/Scripts/python", "music_analysis_plus.py"],
+      "command": [".venv/Scripts/python", "ableton_full_mcp_server.py"],
       "enabled": true
     }
   }
 }
 ```
 
-## Outils MCP disponibles
+Le serveur `ableton-full` (unifié) remplace les deux anciens serveurs (`ableton-mcp` + `music-analysis`). Un seul process, outils atomiques comme `capture_at_position`.
 
-### Capture audio
+## Outils MCP disponibles (serveur unifié `ableton-full`)
+
+### Capture audio atomique (nouveau)
 
 | Tool | Description |
 |---|---|
-| `capture_ableton(duration=5, output_name=None)` | Capture l'audio depuis Ableton via VB-Cable (sauvegarde dans `data/analyses/`) |
-| `capture_and_tempo(duration=5)` | Capture + estimation du tempo |
-| `capture_and_analyze(duration=5)` | Capture + analyse complète (tempo, beats, chroma, MFCC) |
-| `play_audio(audio, sr)` | Joue un tableau numpy sur le périphérique par défaut |
-| `play_wav(path)` | Joue un fichier WAV sur le périphérique par défaut |
+| `capture_at_position(position_beats, duration_sec, output_name)` | Stop → switch view → seek → play → capture (bloque `duration_sec` s) → stop → load WAV |
+| `capture_and_analyze(position_beats, duration_sec, output_name)` | `capture_at_position` + analyse complète en un seul appel |
+| `capture_ableton(duration, output_name)` | Capture audio depuis VB-Cable (standalone) |
 
 ### Analyse (fichier existant)
 
 | Tool | Description |
 |---|---|
-| `load(file_path)` | Charge un fichier audio |
-| `tempo(y_path)` | Estime le BPM |
-| `beat_track(y_path)` | Détecte les temps forts |
-| `chroma_cqt(y_path)` | Contenu chromatique (12 notes) |
-| `mfcc(y_path)` | Timbre / texture spectrale |
-| `get_duration(y_path)` | Durée en secondes |
+| `load(file_path)` | Charge un fichier audio (fix: `np.mean` au lieu de `librosa.to_mono`) |
+| `analyze_full_tool(y_path)` | Tout-en-un : key, energy, spectral, tuning, tempo |
+| `analyze_energy_tool(y_path)` | RMS, peak, dynamic range |
+| `analyze_spectral_tool(y_path)` | Centroid, rolloff, bandwidth, ZCR |
+| `analyze_tuning_tool(y_path)` | Cents offset |
+| `detect_key_tool(y_path)` | Détection tonalité (Krumhansl-Kessler) |
+| `tempo_tool(y_path)` | Estime le BPM |
+| `get_duration_tool(y_path)` | Durée en secondes |
+| `beat_track_tool(y_path)` | Détecte les temps forts |
+| `chroma_cqt_tool(y_path)` | Chromagram (12 notes) |
+| `mfcc_tool(y_path)` | Timbre / texture spectrale |
 
-### Ableton (via `ableton-mcp`)
+### Contrôle Ableton (Session / Transport)
 
 | Tool | Description |
 |---|---|
-| `get_session_info()` | Infos session (tempo, tracks) |
-| `get_track_info(index)` | Détails d'une piste |
+| `get_session_info()` | Tempo, signature, tracks, is_playing, current_song_time |
+| `get_track_info(index)` | Détails d'une piste (nom, clips, devices, volume, pan) |
+| `set_tempo(bpm)` | Changer le tempo |
+| `start_playback()` / `stop_playback()` | Démarrer/arrêter |
+| `start_playback_at(time)` | **Start playback first, THEN seek** (correction : Live reset le temps au `start_playing()`) |
+| `set_arrangement_time(time)` | Positionner le playhead |
+
+### Pistes & Clips
+
+| Tool | Description |
+|---|---|
 | `create_midi_track(index)` | Nouvelle piste MIDI |
-| `set_track_name(index, name)` | Renommer une piste |
+| `set_track_name(index, name)` | Renommer |
+| `delete_track(index)` | Supprimer |
+| `duplicate_track(index)` | Dupliquer |
 | `create_clip(track, slot, length)` | Nouveau clip MIDI |
-| `add_notes_to_clip(track, slot, notes)` | Ajouter des notes |
-| `fire_clip(track, slot)` | Lancer un clip |
-| `load_instrument(track, uri)` | Charger un instrument |
+| `add_notes_to_clip(track, slot, notes)` | Ajouter des notes MIDI |
+| `get_clip_notes(track, slot)` | Lire les notes MIDI |
+| `set_clip_name(track, slot, name)` | Nommer un clip |
+| `fire_clip(track, slot)` / `stop_clip(track, slot)` | Lancer/arrêter un clip |
+| `duplicate_clip(track, slot)` | Dupliquer un clip |
+| `delete_session_clip(track, slot)` | Supprimer clip session |
+| `delete_arrangement_clip(track, index)` | Supprimer clip arrangement |
+| `quantize_clip(track, slot, amount)` | Quantifier (0.0–1.0) |
+| `duplicate_to_arrangement(track, slot, dest_time)` | Copier clip Session → Arrangement |
+| `get_arrangement_clips(track)` | Lister clips arrangement |
+
+### Instruments & Effets
+
+| Tool | Description |
+|---|---|
+| `get_browser_tree(category)` | Explorer le browser |
+| `get_browser_items_at_path(path)` | Items à un chemin |
+| `load_instrument_or_effect(track, uri)` | Charger un instrument/effet |
+| `get_device_parameters(track, device)` | Lire les paramètres d'un device |
+| `set_device_parameter(track, device, name, value)` | Modifier un paramètre |
+
+### Scenes, Mixer, Projet
+
+| Tool | Description |
+|---|---|
+| `create_scene(index)` / `fire_scene(index)` | Créer/lancer une scene |
+| `set_track_volume(track, value)` | Volume piste (0.0–1.0) |
+| `get_sends(track)` / `set_send(track, send, value)` | Envois |
+| `set_monitoring(track, state)` | Monitoring (0=auto, 1=in, 2=off) |
+| `freeze_track(index)` / `flatten_track(index)` | Freeze/flatten |
+| `set_track_color(index, color)` / `set_clip_color(...)` | Couleurs (0–255) |
+| `save_project()` | Sauvegarder (non dispo Live 12 Lite) |
+| `undo()` / `redo()` | Annuler/rétablir |
 
 ## Structure du projet
 
 ```
-ableton-holland-mcp/
+ ableton-holland-mcp/
 ├── data/
 │   ├── tests/             # Fichiers audio de test (.wav, .mp3)
-│   └── analyses/          # Résultats d'analyse (.wav + .csv)
+│   ├── analyses/          # Résultats d'analyse (.wav + .csv)
+│   └── scripts/           # Scripts utilitaires
 ├── dashboard/
 │   └── app.py             # Interface graphique (Tkinter + matplotlib)
-├── AbletonMCP_Remote_Script.py  # Remote Script Ableton (à copier dans Ableton)
-├── music_analysis_plus.py       # Serveur MCP personnalisé (capture + analyse)
-├── capture_audio.py             # Script capture simple (sounddevice, legacy)
-├── requirements.txt             # Dépendances Python
-├── opencode.jsonc               # Configuration MCP pour opencode
+├── ableton_full_mcp_server.py    # Serveur MCP UNIFIÉ (Ableton + analyse)
+├── AbletonMCP_Remote_Script.py   # Remote Script Ableton (à copier)
+├── music_analysis_plus.py        # Serveur analyse standalone (legacy)
+├── ableton_mcp_server.py         # Serveur Ableton standalone (legacy)
+├── opencode.jsonc                # Configuration MCP
+├── requirements.txt              # Dépendances Python
+├── AGENTS.md
+├── SPEC.md
 ├── .gitignore
 └── README.md
 ```
@@ -328,6 +373,14 @@ python dashboard/app.py
 → Vérifier que VB-Cable est installé
 
 ## Notes de version
+
+### Itération 5 (28 juin 2026) — Serveur unifié + capture atomique
+- **Serveur unifié** `ableton_full_mcp_server.py` (remplace `ableton-mcp` + `music-analysis`)
+- **`capture_at_position(position, duration)`** — stop → switch → play at position → capture → stop → load
+- **`capture_and_analyze(position, duration)`** — capture + analyse en un appel
+- **Fix `start_playback_at`** : `start_playing()` PUIS `current_song_time = X` (Live reset le temps au démarrage)
+- **Fix `load()`** : `np.mean(audio, axis=1)` au lieu de `librosa.to_mono()` (inversion canaux)
+- Documentation mise à jour (README, AGENTS, SPEC)
 
 ### Itération 4 (24 juin 2026) — Remote Script arrangement
 - Mise à jour du Remote Script Ableton (v1314 lignes) avec support Arrangement View

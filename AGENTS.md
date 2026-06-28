@@ -2,20 +2,14 @@
 
 ## Vue d'ensemble
 
-Assistant de production musicale connecté à Ableton Live via deux serveurs MCP :
-- **`ableton-mcp`** (uvx) — contrôle d'Ableton (pistes, clips, instruments, arrangement)
-- **`music-analysis`** (`music_analysis_plus.py`) — capture audio via VB-Cable + analyse librosa
+Assistant de production musicale connecté à Ableton Live via un **serveur MCP unifié** :
+- **`ableton-full`** (`ableton_full_mcp_server.py`) — contrôle d'Ableton (pistes, clips, instruments, arrangement) + capture audio via VB-Cable + analyse librosa
 
-## Serveurs MCP
+## Serveur MCP
 
-### ableton-holland-mcp (démarrage) — local
+### ablebon-full (démarrage) — local
 ```
-"command": [".venv/Scripts/python", "ableton_mcp_server.py"]
-```
-
-### music-analysis (démarrage)
-```
-"command": [".venv/Scripts/python", "music_analysis_plus.py"]
+"command": [".venv/Scripts/python", "ableton_full_mcp_server.py"]
 ```
 
 ## Audio Routing (Voicemeeter + VB-Cable)
@@ -134,8 +128,8 @@ Buffer Voicemeeter : 1024 samples pour stabilité
 | Tool | Description |
 |---|---|
 | `capture_ableton(duration=5)` | Capture audio depuis VB-Cable → WAV |
-| `capture_and_analyze(duration=5)` | Capture + analyse complète |
-| `capture_and_tempo(duration=5)` | Capture + BPM |
+| `capture_at_position(position, duration, output_name)` | **Atomique** : stop → switch → start_playback_at → capture → stop → load |
+| `capture_and_analyze(position, duration, output_name)` | Capture + analyse complète en un appel |
 
 ### Analyse
 | Tool | Description |
@@ -170,43 +164,36 @@ switch_to_arrangement_view → duplicate_to_arrangement × N → get_arrangement
 
 ### Analyser le mix (workflow obligatoire)
 **Important :** `set_arrangement_time` retourne des valeurs obsolètes (lit l'ancienne position). Toujours vérifier avec `get_session_info`.  
-**Important :** `start_playback_at(time)` combine positionnement + lecture atomiquement (évite le saut de playhead). Préférer cette méthode.
+**Important :** `start_playback_at(time)` combine positionnement + lecture atomiquement. `start_playing()` PUIS `current_song_time = X` (Live reset le temps au démarrage).
 
 #### Workflow standard (capture depuis le début)
 
-1. `switch_to_arrangement_view()` — vue Arrangement requise
-2. `start_playback_at(0)` — positionne ET démarre atomiquement
-3. `get_session_info()` — vérifier position
-4. `capture_ableton(duration=N)` — capturer (bloquant N secondes)
-5. `stop_playback()` — stopper
-6. `analyze_full(y_path)` — analyser
-
 ```python
-# Workflow standard depuis le début
-stop_playback()
-switch_to_arrangement_view()
-start_playback_at(0)                     # positionne + démarre atomiquement
-get_session_info()                       # vérifier position
-capture_ableton(duration=15)             # capturer
-stop_playback()
-analyze_full(y_path)
+# Atomic : stop → seek → play → capture → stop → load → analyze
+capture_and_analyze(position_beats=0, duration_sec=10)
 ```
 
 #### Workflow capture à une position précise (ex: couplet à beat 32)
 
 ```python
-# Workflow position précise
+# Atomic : tout en un appel
+capture_and_analyze(position_beats=32, duration_sec=10, output_name="couplet1")
+```
+
+#### Workflow manuel (pas à pas si besoin)
+
+```python
 stop_playback()
-switch_to_arrangement_view()             # Obligatoire !
-start_playback_at(desired_time)          # ex: 32, atomique = pas de saut
-get_session_info()                       # vérifier avant capture
+switch_to_arrangement_view()
+start_playback_at(desired_time)          # ex: 32
+get_session_info()                       # vérifier position
 capture_ableton(duration=N)              # capturer (bloquant)
 stop_playback()
 analyze_full(y_path)
 ```
 
 **Remarques sur les timeouts :**
-- Si `capture_ableton` ou `capture_and_analyze` time out, réduire `duration` à ≤ 15 s.
+- `capture_at_position` et `capture_and_analyze` bloquent `duration_sec` secondes (le temps de capture). Avec le timeout MCP à 600s (config), les captures jusqu'à 60s passent.
 - Ne pas lancer plusieurs `load_instrument_or_effect` en parallèle pour éviter la saturation du serveur.
 - En cas de timeout persistant, consulter : https://mcpcat.io/guides/fixing-mcp-error-32001-request-timeout
 
@@ -326,6 +313,7 @@ Pour chaque section de la chanson (couplet, refrain, pont, etc.) :
 - Premier appel MCP après démarrage opencode peut timeout (~60s)
 - Arrangement API nécessite Remote Script v1314+ (dans `C:\ProgramData\Ableton\Live XX\Resources\MIDI Remote Scripts\AbletonMCP\__init__.py`)
 - `set_arrangement_time(time)` est imprécis : la position réelle peut différer de la valeur demandée (décalage systématique). Contournement : utiliser `start_playback_at(time)` qui combine positionnement + démarrage atomiquement.
+- `start_playback_at(time)` : `start_playing()` reset `current_song_time` à 0. L'ordre correct est `start_playing()` PUIS `current_song_time = X` (dans `AbletonMCP_Remote_Script.py`).
 - `load_instrument_or_effect` peut timeout si le serveur est occupé. Réessayer en réduisant la charge (ne pas lancer plusieurs appels simultanés).
 - Pour déployer le Remote Script, le copier manuellement dans le dossier Ableton pendant qu'Ableton est fermé.
 

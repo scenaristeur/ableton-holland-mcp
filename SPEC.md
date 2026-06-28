@@ -1,4 +1,4 @@
-# SPEC — Ableton Holland MCP v2
+# SPEC — Ableton Holland MCP v3
 
 ## 1. Contexte & Problème
 
@@ -21,33 +21,40 @@ Le MCP actuel permet de contrôler Ableton Live (créer des pistes, des clips, a
 ┌─────────────────────────────────────────────────────────────┐
 │  opencode (client MCP)                                       │
 │  │                                                           │
-│  ├─ Tool: get_device_parameters(...)                         │
-│  ├─ Tool: set_device_parameter(...)                          │
+│  ├─ Tool: capture_and_analyze(position, duration)            │
+│  ├─ Tool: capture_at_position(position, duration)            │
+│  ├─ Tool: start_playback_at(time)                            │
 │  ├─ ...                                                      │
 └──────────┬──────────────────────────────────────────────────┘
            │ JSON-RPC (stdin/stdout)
 ┌──────────▼──────────────────────────────────────────────────┐
-│  ableton_mcp_server.py    ← NOUVEAU                         │
+│  ableton_full_mcp_server.py    ← UNIFIÉ                     │
 │  (FastMCP Server Python)                                     │
 │                                                              │
-│  - Reçoit les appels MCP                                     │
-│  - Les traduit en commandes JSON                             │
-│  - Envoie/réçoit via socket TCP                              │
+│  - Contrôle Ableton (socket → Remote Script)                 │
+│  - Capture audio (sounddevice → VB-Cable)                   │
+│  - Analyse librosa                                           │
+│  - Tools atomiques : capture_at_position, capture_and_analyze│
 └──────────┬──────────────────────────────────────────────────┘
-           │ Socket TCP (port 9877)
-┌──────────▼──────────────────────────────────────────────────┐
-│  AbletonMCP_Remote_Script.py   ← MODIFIÉ                    │
-│  (ControlSurface Live API)                                   │
-│                                                              │
-│  - Reçoit les commandes JSON                                 │
-│  - Les exécute via Live API (song, track, clip, device...)   │
-│  - Renvoie la réponse JSON                                   │
-└─────────────────────────────────────────────────────────────┘
+           │ Socket TCP (port 9877)           │
+           │                                  │
+┌──────────▼──────────────────┐    ┌─────────▼─────────────┐
+│  AbletonMCP_Remote_Script   │    │  VB-Cable (CABLE Out) │
+│  (ControlSurface Live API)  │    │  ← capture audio     │
+│  - Reçoit commandes JSON    │    │                       │
+│  - start_playback_at fix:    │    │                       │
+│    start_playing() PUIS     │    │                       │
+│    current_song_time = X    │    │                       │
+└─────────────────────────────┘    └───────────────────────┘
 ```
 
-### Pourquoi remplacer `uvx ableton-mcp` ?
+### Pourquoi un serveur unifié (`ableton_full`) ?
 
-Le package `uvx ableton-mcp` est un binaire externe non modifiable. En créant notre propre serveur MCP, on contrôle totalement les fonctionnalités, le format des données, et on peut ajouter des outils sans attendre une mise à jour du package officiel.
+Le serveur `ableton_full_mcp_server.py` fusionne deux serveurs MCP précédents (`ableton-mcp` + `music-analysis`) en un seul process. Cela permet :
+
+1. **Tools atomiques** — `capture_at_position` combine stop → seek → play → capture → stop → load en un seul appel
+2. **Pas de synchronisation inter-process** — un seul event loop, pas de threads
+3. **Pas de course critique** — le positionnement et la capture sont garantis dans le bon ordre
 
 ## 3. Spécification des nouvelles commandes (Remote Script)
 
@@ -167,7 +174,53 @@ Response: {"status": "success", "result": {"notes": [...]}}
 
 Note: pour les clips arrangement, on doit d'abord les lister via `get_arrangement_clips`, puis utiliser l'index pour accéder au clip via `track.arrangement_clips[i]`.
 
-### 3.7 Pitch MIDI effect transposition
+### 3.7 `start_playback_at` fix
+
+**Problème :** `start_playing()` dans l'API Live reset `current_song_time` à 0. L'ordre `set_time → start_playing()` ne fonctionne pas — la lecture démarre à 0.
+
+**Solution :** inverser l'ordre — `start_playing()` PUIS `current_song_time = X`.
+
+```
+# AbletonMCP_Remote_Script.py
+self._song.start_playing()
+self._song.current_song_time = float(time_val)
+```
+
+Retour : impossible de lire la nouvelle position (Live n'a pas encore mis à jour). Toujours vérifier avec `get_session_info()`.
+
+### 3.8 Capture audio atomique (`capture_at_position`)
+
+```
+Request:  {"type": "capture_at_position", "params": {
+            "position_beats": float,
+            "duration_sec": float,
+            "output_name": str | null}}
+Response: {"y_path": str, "wav_path": str, "position_beats": float,
+           "duration_sec": float, "seek": dict, "end_song_time": float}
+```
+
+Workflow interne :
+1. `stop_playback()` — arrêt
+2. `switch_to_arrangement_view()` — vue Arrangement
+3. `set_time_on_main_thread(position)` → `start_playback()` — jouer
+4. `_record_wav(duration_sec)` — enregistrer (bloquant)
+5. `stop_playback()` — arrêter
+6. `load(wav_path)` — charger le WAV (écrit le CSV)
+
+### 3.9 Capture + analyse (`capture_and_analyze`)
+
+```
+Request:  {"type": "capture_and_analyze", "params": {
+            "position_beats": float,
+            "duration_sec": float,
+            "output_name": str | null}}
+Response: {"y_path": str, "wav_path": str, ..., "key": str,
+           "mode": str, "spectral_centroid_hz": float, ...}
+```
+
+Combine `capture_at_position` + `analyze_full` en un seul appel MCP.
+
+### 3.10 Pitch MIDI effect transposition
 
 #### `set_pitch_transposition`
 ```
