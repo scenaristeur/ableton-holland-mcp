@@ -236,6 +236,19 @@ def get_arrangement_clip_notes(track_index: int, clip_index: int) -> dict[str, A
     )
 
 
+@app.tool()
+def set_arrangement_clip_notes(
+    track_index: int, clip_index: int, notes: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Replace all MIDI notes in an arrangement clip. Each note: {pitch, start_time, duration, velocity, mute}."""
+    return _cmd(
+        "set_arrangement_clip_notes",
+        track_index=track_index,
+        clip_index=clip_index,
+        notes=notes,
+    )
+
+
 # ── Audio ───────────────────────────────────────────────────────────────────
 
 

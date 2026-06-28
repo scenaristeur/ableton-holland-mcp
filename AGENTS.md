@@ -171,18 +171,24 @@ switch_to_arrangement_view → duplicate_to_arrangement × N → get_arrangement
 **Important :** Sans loop dans l'arrangement, Ableton ne boucle pas — le playhead avance jusqu'à la fin et s'arrête. Toujours faire :
 
 1. `stop_playback()` — stopper la lecture
-2. `set_arrangement_time(0)` — remettre le playhead au début (ou `set_arrangement_time(8)` si 0 ne fonctionne pas)
-3. `start_playback()` — lancer la lecture
-4. **Immédiatement** `capture_ableton(duration=N)` — capturer pendant que le son joue
-5. `stop_playback()` — toujours stopper la lecture, surtout si la capture échoue
+2. `set_arrangement_time(0)` — remettre le playhead au début
+3. `capture_ableton(duration=N)` **ET** `start_playback()` **en parallèle** — la capture commence à enregistrer, le playback démarre en même temps
+4. La capture se termine automatiquement après N secondes → retourne `y_path`
+5. `stop_playback()` — stopper la lecture
+6. `set_arrangement_time(0)` — remettre le playhead à zéro
+7. `analyze_full(y_path)` — analyser
 
 ```python
 # Workflow standard
 stop_playback()
-set_arrangement_time(0)      # remet à 0
-start_playback()             # joue depuis le début
-capture_ableton(duration=15) # capture immédiate
-analyze_full(y_path)         # analyse
+set_arrangement_time(0)          # remet à 0
+# Appels parallèles : capture commence, puis playback démarre
+capture_ableton(duration=15)     # blocant ~15s
+start_playback()                 # en parallèle
+# ← ici la capture est finie
+stop_playback()
+set_arrangement_time(0)
+analyze_full(y_path)
 ```
 
 **Remarques sur les timeouts :**
@@ -194,6 +200,12 @@ analyze_full(y_path)         # analyse
 
 ### Nommage pistes
 - `1-Instrument`, `2-Instrument`, etc. (maintient l'ordre dans Ableton)
+
+### Conventions de mesure
+**L'utilisateur parle en mesures (barres), pas en beats.** Dans Ableton, l'affichage principal est en mesures. Convertir systématiquement :
+- 1 mesure = 4 beats (en 4/4)
+- Les `start_time` des notes MIDI sont en beats (l'API MCP utilise des beats)
+- Quand tu parles à l'utilisateur, utilise **toujours les mesures**
 
 ### Durées clip (100 BPM, 4/4)
 - 1 barre = 4.0 beats

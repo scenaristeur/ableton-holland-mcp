@@ -246,6 +246,7 @@ class AbletonMCP(ControlSurface):
                 "switch_to_arrangement_view",
                 "set_current_song_time",
                 "duplicate_session_clip_to_arrangement",
+                "set_arrangement_clip_notes",
                 # Device parameters
                 "set_device_parameter",
                 # Clip operations
@@ -361,6 +362,13 @@ class AbletonMCP(ControlSurface):
                             destination_time = params.get("destination_time", 0.0)
                             result = self._duplicate_session_clip_to_arrangement(
                                 track_index, clip_index, destination_time
+                            )
+                        elif command_type == "set_arrangement_clip_notes":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            notes = params.get("notes", [])
+                            result = self._set_arrangement_clip_notes(
+                                track_index, clip_index, notes
                             )
                         # ── Device parameters ─────────────────────────────────────
                         elif command_type == "set_device_parameter":
@@ -2014,6 +2022,32 @@ class AbletonMCP(ControlSurface):
                 }
         except Exception as e:
             self.log_message("Error getting arrangement clip notes: " + str(e))
+            raise
+
+    def _set_arrangement_clip_notes(self, track_index, clip_index, notes):
+        """Replace all MIDI notes in an arrangement clip"""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            clips = list(track.arrangement_clips)
+            if clip_index < 0 or clip_index >= len(clips):
+                raise IndexError("Arrangement clip index out of range")
+            clip = clips[clip_index]
+            if not clip.is_midi_clip:
+                raise Exception("Clip is not a MIDI clip")
+            live_notes = []
+            for note in notes:
+                pitch = note.get("pitch", 60)
+                start_time = note.get("start_time", 0.0)
+                duration = note.get("duration", 0.25)
+                velocity = note.get("velocity", 100)
+                mute = note.get("mute", False)
+                live_notes.append((pitch, start_time, duration, velocity, mute))
+            clip.set_notes(tuple(live_notes))
+            return {"note_count": len(notes)}
+        except Exception as e:
+            self.log_message("Error setting arrangement clip notes: " + str(e))
             raise
 
     # ═══════════════════════════════════════════════════════════════
