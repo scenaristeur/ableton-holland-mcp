@@ -616,6 +616,32 @@ def redo() -> dict[str, Any]:
     return _cmd("redo")
 
 
+# ── Clip Envelopes (Modulation) ──────────────────────────────────────────────
+
+
+@app.tool()
+def set_arrangement_clip_envelope(
+    track_index: int,
+    clip_index: int,
+    target: str = "volume",
+    points: str = "[]",
+) -> dict[str, Any]:
+    """Set modulation envelope on an arrangement clip.
+    Each point: {'time': float, 'value': float, 'duration': float} (time & duration in beats).
+    target: 'volume', 'panning', 'send_N', or 'device_N_PARAMNAME'
+    (e.g. 'device_1_Dry/Wet' for the Dry/Wet parameter of device index 1).
+    clip_index is the index of the clip in the arrangement (0-based, from get_arrangement_clips).
+    points is a JSON string, e.g. '[{"time":0, "value":1}]'."""
+    parsed = json.loads(points) if points else []
+    return _cmd(
+        "set_arrangement_clip_envelope",
+        track_index=track_index,
+        clip_index=clip_index,
+        target=target,
+        points=parsed,
+    )
+
+
 # ============================================================================
 # ── MUSIC ANALYSIS TOOLS (with atomic capture_at_position) ──────────────────
 # ============================================================================
@@ -706,15 +732,12 @@ async def _record_wav(output_name: str, duration_sec: float) -> str | None:
 
 
 def _ableton_stop_and_seek(position_beats: float) -> dict:
-    """Stop → switch → start_playback_at (start first, then set time)."""
+    """Stop → start_playback_at (start first, then set time)."""
     _cmd("stop_playback")
     for _ in range(30):
         if not _cmd("get_session_info").get("is_playing"):
             break
         time.sleep(0.1)
-
-    _cmd("switch_to_arrangement_view")
-    time.sleep(0.3)
 
     _cmd("start_playback_at", time=position_beats)
     time.sleep(0.3)
@@ -737,7 +760,7 @@ async def capture_at_position(
     Atomic capture at arrangement position.
 
     Workflow:
-    stop → switch → start_playback_at → record (blocking) → stop → load
+    stop → start_playback_at → record (blocking) → stop → load
     """
     if output_name is None:
         output_name = f"cap_{position_beats:.0f}b_{datetime.now().strftime('%H%M%S')}"

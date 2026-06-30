@@ -4,12 +4,18 @@
 
 Assistant de production musicale connecté à Ableton Live via un **serveur MCP unifié** :
 - **`ableton-full`** (`ableton_full_mcp_server.py`) — contrôle d'Ableton (pistes, clips, instruments, arrangement) + capture audio via VB-Cable + analyse librosa
+- **`surge-osc`** (`surge_osc_mcp.py`) — contrôle de Surge XT via OSC (paramètres, patches, notes)
 
 ## Serveur MCP
 
 ### ablebon-full (démarrage) — local
 ```
 "command": [".venv/Scripts/python", "ableton_full_mcp_server.py"]
+```
+
+### surge-osc (démarrage) — local
+```
+"command": [".venv/Scripts/python", "surge_osc_mcp.py"]
 ```
 
 ## Audio Routing (Voicemeeter + VB-Cable)
@@ -121,6 +127,66 @@ Buffer Voicemeeter : 1024 samples pour stabilité
 |---|---|
 | `save_project()` | Sauvegarder le projet (non disponible dans Live 12 Lite — sauvegarder manuellement) |
 | `undo()` / `redo()` | Annuler/rétablir |
+
+## Outils Surge XT (OSC)
+
+### Patches
+| Tool | Description |
+|---|---|
+| `surge_get_patch(instance=0)` | Nom du patch actuel pour l'instance N |
+| `surge_load_patch(path, instance=0)` | Charger un patch (path absolu sans extension) |
+| `surge_incr_patch(instance=0)` / `surge_decr_patch(instance=0)` | Patch suivant/précédent |
+| `surge_random_patch(instance=0)` | Patch aléatoire |
+
+### Paramètres
+| Tool | Description |
+|---|---|
+| `surge_get_param(address, instance=0)` | Lire un paramètre (ex: `/param/a/filter/1/cutoff`) |
+| `surge_set_param(address, value, instance=0)` | Modifier un paramètre (0.0–1.0) |
+| `surge_query_all(instance=0)` | Dumper tous les paramètres |
+
+### Notes
+| Tool | Description |
+|---|---|
+| `surge_note_on(pitch, velocity, instance=0)` | Note MIDI on |
+| `surge_note_off(pitch, instance=0)` | Note MIDI off |
+| `surge_all_notes_off(instance=0)` | Couper toutes les notes |
+
+### Adresses OSC courantes
+```
+/param/a/osc/1/pitch       /param/a/osc/2/pitch       /param/a/osc/3/pitch
+/param/a/osc/1/type        /param/a/osc/1/param1..7   (morph, skew, saturate, etc.)
+/param/a/filter/1/cutoff   /param/a/filter/1/resonance
+/param/a/filter/2/cutoff   /param/a/filter/2/resonance
+/param/a/amp/volume        /param/a/amp/pan           /param/a/amp/gain
+/param/a/mixer/osc1/volume /param/a/mixer/osc1/mute   /param/a/mixer/noise/volume
+/param/macro/1..8          /param/global/volume        /param/global/polyphony_limit
+/param/a/play_mode         /param/a/osc/fm_depth       /param/a/waveshaper/drive
+```
+
+**Note :** `surge_load_patch` convertit automatiquement les `/` en `\` (Windows) pour éviter l'affichage du chemin complet dans Surge XT. L'OSC doit être activé dans Surge XT (Settings → OSC → Enable). Par défaut port IN 53280, OUT 53281. Jusqu'à 8 instances Surge XT supportées (ports : 53280-53295, stride=2).
+
+### Configuration OSC dans Surge XT
+
+1. Ouvrir Surge XT dans Ableton
+2. Cliquer sur le logo **"S"** en haut à gauche → **Settings** → **OSC**
+3. Cocher **Enable OSC**
+4. Configurer les ports :
+   - **Port (IN)** : port sur lequel Surge écoute (le serveur MCP y envoie)
+   - **Port (OUT)** : port sur lequel Surge envoie ses réponses (le serveur MCP écoute)
+5. Par défaut : IN=53280, OUT=53281
+6. Pour plusieurs instances : chaque instance sur une paire différente (ex: instance 1 = IN=53282, OUT=53283)
+
+### Paramètres FX OSC
+Surge XT intègre 4 slots FX par chaîne (A/B), accessibles via :
+```
+/param/fx/a/1/type       /param/fx/a/1/param1..12
+/param/fx/a/2/type       /param/fx/a/2/param1..12
+/param/fx/b/1/type       /param/fx/b/1/param1..12
+/param/fx/send/1..4/type /param/fx/send/1..4/param1..12
+/param/fx/global/1..4/type /param/fx/global/1..4/param1..12
+```
+`type=0` = pas d'effet, `type>=1` = effet sélectionné selon l'index.
 
 ## Outils Music Analysis disponibles
 
@@ -240,6 +306,42 @@ Utiliser `get_browser_tree("instruments")` pour explorer les URIs disponibles.
 
 **Guide Voice préféré** : Some Trumpets (instrument rack)
 **Style de chant** : parlé-chanté, nonchalant et cynique (influence Gainsbourg / Desproges)
+
+## Préférences Production
+
+### Contraintes techniques
+- **Max 8 pistes** (Ableton Live Lite)
+- **Max 16 scènes** par piste (session view)
+- **Plugins natifs Ableton uniquement** (Analog, Drift, Wavetable, Electric, Drum Rack, Simpler, effets natifs)
+- **Drumkit pré-existant** (Drum Rack avec kit .adg existant — privilégier un kit déjà prêt plutôt que de le construire)
+- Pas de limite de jouabilité — gammes riches, harmonies complexes, emprunts modaux bienvenus
+
+### Choix créatifs par défaut
+- **Français** sauf demande contraire
+- **Voix : parlé-chanté**, tessiture E3–B3
+- **Tonalité de prédilection : C#m** (nouveau), sinon Em
+- **Structure courte** privilégiée (~1m30-2m) sauf demande contraire
+- **Pop organique** — instruments aux timbres chauds, drums naturels, pas d'EDM
+- **Styles de référence :** indie rock français, Gainsbourg, pop analogique
+
+### Drum kits recommandés (par vibe)
+| Vibe | Kit |
+|---|---|
+| Organique / chaud | `Selector Kit Warm.adg` |
+| Généraliste | `Gen Purpose Kit.adg` |
+| Sec / naturel | `Dry Session Kit.adg` |
+| Lo-fi | `Toy LoFi Kit.adg` |
+| Hybride studio | `Recording Hybrid Kit - Damped Snare.adg` |
+
+### Chaîne FX natives recommandées
+- **Drums :** Drum Buss → Compressor → Reverb (send)
+- **Basse :** Amp → Compressor → Saturator
+- **Piano/Keys :** Reverb → Chorus → Compressor
+- **Pad :** Reverb → Auto Filter → Delay
+- **Lead :** Delay → Reverb → Auto Filter
+- **Voix :** EQ Eight → Compressor → Reverb → Delay
+- **Percs :** Reverb (send) → Saturator
+- **FX :** Reverb → Delay → Grain Delay → Auto Filter
 
 ## Guide Voix & Tessiture — Méthode Générique
 
