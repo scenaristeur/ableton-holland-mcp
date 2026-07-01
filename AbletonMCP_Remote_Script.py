@@ -2645,16 +2645,10 @@ class AbletonMCP(ControlSurface):
             raise
 
     def _set_arrangement_clip_envelope(self, track_index, clip_index, target, points):
-        """Set modulation envelope on an arrangement clip via session-clip workaround.
+        """Set modulation envelope on an arrangement clip.
 
-        clip.automation_envelope() only works on session clips, so we:
-          1. Read notes from the arrangement clip
-          2. Create a temp session clip with those notes
-          3. Apply the envelope to the session clip
-          4. Delete the original arrangement clip
-          5. Duplicate the session clip to arrangement
-          6. Delete the temp session clip
-        """
+        Workaround: create and apply envelope on a temp session clip,
+        then duplicate to arrangement. The duplicate carries the envelope."""
         try:
             if track_index < 0 or track_index >= len(self._song.tracks):
                 raise IndexError("Track index out of range")
@@ -2664,31 +2658,25 @@ class AbletonMCP(ControlSurface):
             if clip_index < 0 or clip_index >= len(clips):
                 raise IndexError("Arrangement clip index out of range")
             src_clip = clips[clip_index]
-            if not src_clip.is_midi_clip:
-                raise Exception("Clip is not a MIDI clip")
 
-            # 1. Read notes and metadata from arrangement clip
             length = src_clip.length
             start_time = src_clip.start_time
             raw_notes = src_clip.get_notes(0.0, 0, length, 127)
             live_notes = tuple(raw_notes)
 
-            # 2. Find an empty session clip slot
             temp_slot = None
             for i in range(len(track.clip_slots)):
                 if not track.clip_slots[i].has_clip:
                     temp_slot = track.clip_slots[i]
-                    temp_idx = i
                     break
             if temp_slot is None:
                 raise Exception("No empty session clip slot available")
 
-            # 3. Create temp session clip with the same notes
             temp_slot.create_clip(length)
             if live_notes:
                 temp_slot.clip.set_notes(live_notes)
 
-            # 4. Apply envelope to the session clip
+            # Apply envelope to TEMP SESSION clip (only session clips support this)
             if points:
                 env = temp_slot.clip.create_automation_envelope(param)
                 for p in points:
@@ -2697,17 +2685,12 @@ class AbletonMCP(ControlSurface):
                     d = float(p.get("duration", 0.0))
                     env.insert_step(t, v, d)
 
-            # 5. Delete original arrangement clip
             track.delete_clip(src_clip)
-
-            # 6. Duplicate session clip to arrangement
             track.duplicate_clip_to_arrangement(temp_slot.clip, float(start_time))
-
-            # 7. Delete temp session clip
             temp_slot.delete_clip()
 
             return {
-                "point_count": len(points),
+                "point_count": len(points) if points else 0,
                 "start_time": start_time,
                 "length": length,
             }

@@ -624,15 +624,15 @@ def set_arrangement_clip_envelope(
     track_index: int,
     clip_index: int,
     target: str = "volume",
-    points: str = "[]",
+    points: list[dict[str, Any]] = [],
 ) -> dict[str, Any]:
     """Set modulation envelope on an arrangement clip.
     Each point: {'time': float, 'value': float, 'duration': float} (time & duration in beats).
     target: 'volume', 'panning', 'send_N', or 'device_N_PARAMNAME'
     (e.g. 'device_1_Dry/Wet' for the Dry/Wet parameter of device index 1).
     clip_index is the index of the clip in the arrangement (0-based, from get_arrangement_clips).
-    points is a JSON string, e.g. '[{"time":0, "value":1}]'."""
-    parsed = json.loads(points) if points else []
+    points is a list of dicts, e.g. [{"time":0, "value":1}]."""
+    parsed = points or []
     return _cmd(
         "set_arrangement_clip_envelope",
         track_index=track_index,
@@ -647,7 +647,7 @@ def set_arrangement_clip_envelope(
 # ============================================================================
 
 
-@app.tool()
+#@app.tool()
 async def capture_ableton(
     duration: float = 15.0,
     output_name: str | None = None,
@@ -750,7 +750,7 @@ def _ableton_stop_and_seek(position_beats: float) -> dict:
     }
 
 
-@app.tool()
+#@app.tool()
 async def capture_at_position(
     position_beats: float,
     duration_sec: float = 10.0,

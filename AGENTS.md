@@ -410,6 +410,7 @@ Pour chaque section de la chanson (couplet, refrain, pont, etc.) :
 
 ## Limitations
 
+- **Captures audio : ne JAMAIS lancer plusieurs captures en parallèle.** Chaque capture fait stop/seek/play/record/stop. Lancer `capture_and_analyze` ou `capture_ableton` une par une, attendre la réponse avant la suivante.
 - Ableton Live Lite : max 8 pistes
 - `save_project()` n'est **pas disponible** via l'API Live 12 Lite (ni `Song.save()`, ni `Application.save_current_song()`). Sauvegarder manuellement (Ctrl+S).
 - Premier appel MCP après démarrage opencode peut timeout (~60s)
