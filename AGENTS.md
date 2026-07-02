@@ -89,6 +89,7 @@ Buffer Voicemeeter : 1024 samples pour stabilité
 | `switch_to_arrangement_view()` | Basculer en vue Arrangement |
 | `set_arrangement_time(time)` | Positionner le playhead (beats) |
 | `get_arrangement_clips(track)` | Lister les clips dans l'arrangement |
+| `set_arrangement_clip_gain(track, clip_index, gain)` | Régler le gain (dB) d'un clip audio arrangement |
 | `duplicate_to_arrangement(track, slot, dest_time)` | Copier clip Session → Arrangement |
 | `get_arrangement_clip_notes(track, index)` | Lire notes MIDI d'un clip arrangement |
 
@@ -127,6 +128,17 @@ Buffer Voicemeeter : 1024 samples pour stabilité
 |---|---|
 | `save_project()` | Sauvegarder le projet (non disponible dans Live 12 Lite — sauvegarder manuellement) |
 | `undo()` / `redo()` | Annuler/rétablir |
+
+### Master Track (NEW — nécessite Remote Script v1414+ et MCP server à jour)
+| Tool | Description |
+|---|---|
+| `get_master_track()` | Infos master : volume, pan, devices list |
+| `set_master_volume(value)` | Volume master (0.0–1.0) |
+| `get_master_device_parameters(device_index)` | Paramètres d'un device sur le master |
+| `set_master_device_parameter(device_index, parameter_name, value)` | Modifier un paramètre sur le master |
+| `load_instrument_or_effect_on_master(uri)` | Charger un effet sur le master |
+
+**Note :** L'API Live Lite ne permettait pas d'accéder au master track avant cette extension. Les outils ci-dessus ont été ajoutés en modifiant le Remote Script (`AbletonMCP_Remote_Script.py`) ET le MCP server (`ableton_full_mcp_server.py`). Le Limiter sur le master (Maximizer) expose les paramètres `Input Gain`, `Ceiling`, `Mode`, `Auto`, `Threshold`, etc. via `get_master_device_parameters(0)`.
 
 ## Outils Surge XT (OSC)
 
@@ -468,7 +480,11 @@ Les erreurs `MCP error -32001 (Request timed out)` surviennent principalement da
   - Réduire le nombre d'appels simultanés (un seul `load_instrument_or_effect` à la fois).
   - Si le timeout persiste, redémarrer le serveur MCP (`uvx ableton-mcp`).
 
-### 3. Règle générale
+### 3. Première capture après démarrage (timeout)
+- **Cause :** librosa compile des fonctions numba/JIT au premier appel (chroma_cqt, beat_track, etc.). Cela peut prendre 5-15s et faire timeout le MCP.
+- **Solution :** `ableton_full_mcp_server.py` précharge tous les modules librosa au démarrage (dummy audio de 3s). Si la première capture timeout encore, relancer une seconde capture — les modules sont alors en cache.
+
+### 4. Règle générale
 - Toujours utiliser `timeout` param si disponible (certains outils MCP acceptent `timeout` en ms dans l'appel).
 - Éviter les `duration` > 20 pour les captures audio (préférer des captures courtes de 20s qui se chevauchent).
 - Si le problème persiste, consulter : https://mcpcat.io/guides/fixing-mcp-error-32001-request-timeout

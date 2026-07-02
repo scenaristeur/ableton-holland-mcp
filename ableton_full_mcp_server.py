@@ -21,6 +21,7 @@ import pandas as pd
 import sounddevice as sd
 import soundfile as sf
 import librosa
+import librosa.util
 
 from fastmcp import FastMCP
 
@@ -396,6 +397,17 @@ def create_clip(
 
 
 @app.tool()
+def create_audio_clip(track_index: int, clip_index: int, path: str) -> dict[str, Any]:
+    """Import an audio file into a session slot (Live 12.0.5+)."""
+    return _cmd(
+        "create_audio_clip",
+        track_index=track_index,
+        clip_index=clip_index,
+        path=path,
+    )
+
+
+@app.tool()
 def add_notes_to_clip(
     track_index: int, clip_index: int, notes: list[dict[str, Any]]
 ) -> dict[str, Any]:
@@ -639,6 +651,75 @@ def set_arrangement_clip_envelope(
         clip_index=clip_index,
         target=target,
         points=parsed,
+    )
+
+
+@app.tool()
+def set_track_solo(track_index: int, solo: bool = True) -> dict[str, Any]:
+    """Solo a track (True = solo on, False = solo off)."""
+    return _cmd("set_track_solo", track_index=track_index, solo=solo)
+
+
+@app.tool()
+def set_track_mute(track_index: int, mute: bool = True) -> dict[str, Any]:
+    """Mute a track (True = muted, False = unmuted)."""
+    return _cmd("set_track_mute", track_index=track_index, mute=mute)
+
+
+@app.tool()
+def set_arrangement_clip_gain(
+    track_index: int, clip_index: int, gain: float
+) -> dict[str, Any]:
+    """Set the gain (in dB) of an arrangement audio clip.
+    clip_index is the 0-based index from get_arrangement_clips."""
+    return _cmd(
+        "set_arrangement_clip_gain",
+        track_index=track_index,
+        clip_index=clip_index,
+        gain=gain,
+    )
+
+
+@app.tool()
+def set_arrangement_clip_pitch(
+    track_index: int, clip_index: int, coarse: int = 0, fine: int = 0
+) -> dict[str, Any]:
+    """Set pitch of an arrangement audio clip (coarse: ±48 semitones, fine: ±50 cents)."""
+    return _cmd(
+        "set_arrangement_clip_pitch",
+        track_index=track_index,
+        clip_index=clip_index,
+        coarse=coarse,
+        fine=fine,
+    )
+
+
+@app.tool()
+def set_arrangement_clip_warp(
+    track_index: int, clip_index: int, warp_on: bool = True, warp_mode: int = 0
+) -> dict[str, Any]:
+    """Set warp state of an arrangement audio clip.
+    warp_mode: 0=beats, 1=tones, 2=textures, 3=re-pitch, 4=complex, 5=complex-pro."""
+    return _cmd(
+        "set_arrangement_clip_warp",
+        track_index=track_index,
+        clip_index=clip_index,
+        warp_on=warp_on,
+        warp_mode=warp_mode,
+    )
+
+
+@app.tool()
+def set_arrangement_clip_markers(
+    track_index: int, clip_index: int, start_marker: float, end_marker: float
+) -> dict[str, Any]:
+    """Set start/end markers of an arrangement audio clip (in beats)."""
+    return _cmd(
+        "set_arrangement_clip_markers",
+        track_index=track_index,
+        clip_index=clip_index,
+        start_marker=start_marker,
+        end_marker=end_marker,
     )
 
 
@@ -913,4 +994,20 @@ def load_tool(file_path: str) -> dict:
 
 
 if __name__ == "__main__":
+    # Preload librosa modules — first call to chroma/beat/tempo triggers
+    # numba compilation which can take 5-15s. Do it at startup so the first
+    # capture doesn't time out.
+    try:
+        sr = 22050
+        dummy = np.zeros(sr * 3, dtype=np.float32)  # 3s of silence
+        _ = librosa.feature.rms(y=dummy)[0]
+        _ = librosa.feature.spectral_centroid(y=dummy, sr=sr)[0]
+        _ = librosa.feature.zero_crossing_rate(dummy)[0]
+        _ = librosa.feature.chroma_cqt(y=dummy, sr=sr, n_chroma=12)
+        _ = librosa.beat.tempo(y=dummy, sr=sr)
+        _ = librosa.feature.mfcc(y=dummy, sr=sr, n_mfcc=13)
+        _ = librosa.onset.onset_strength(y=dummy, sr=sr)
+    except Exception:
+        pass  # Preload is best-effort
+
     app.run(transport="stdio")

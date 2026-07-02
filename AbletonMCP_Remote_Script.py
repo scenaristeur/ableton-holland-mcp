@@ -296,6 +296,12 @@ class AbletonMCP(ControlSurface):
                 "set_clip_envelope",
                 "set_arrangement_clip_envelope",
                 "set_track_volume",
+                "set_track_solo",
+                "set_track_mute",
+                "set_arrangement_clip_gain",
+                "set_arrangement_clip_pitch",
+                "set_arrangement_clip_warp",
+                "set_arrangement_clip_markers",
             ]:
                 # Use a thread-safe approach with a response queue
                 response_queue = queue.Queue()
@@ -552,6 +558,45 @@ class AbletonMCP(ControlSurface):
                             points = params.get("points", [])
                             result = self._set_arrangement_clip_envelope(
                                 track_index, clip_index, target, points
+                            )
+                        elif command_type == "set_track_solo":
+                            track_index = params.get("track_index", 0)
+                            solo = params.get("solo", False)
+                            result = self._set_track_solo(track_index, solo)
+                        elif command_type == "set_track_mute":
+                            track_index = params.get("track_index", 0)
+                            mute = params.get("mute", False)
+                            result = self._set_track_mute(track_index, mute)
+                        elif command_type == "set_arrangement_clip_gain":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            gain = params.get("gain", 0.0)
+                            result = self._set_arrangement_clip_gain(
+                                track_index, clip_index, gain
+                            )
+                        elif command_type == "set_arrangement_clip_pitch":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            coarse = params.get("coarse", 0)
+                            fine = params.get("fine", 0)
+                            result = self._set_arrangement_clip_pitch(
+                                track_index, clip_index, coarse, fine
+                            )
+                        elif command_type == "set_arrangement_clip_warp":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            warp_on = params.get("warp_on", True)
+                            warp_mode = params.get("warp_mode", 0)
+                            result = self._set_arrangement_clip_warp(
+                                track_index, clip_index, warp_on, warp_mode
+                            )
+                        elif command_type == "set_arrangement_clip_markers":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            start_marker = params.get("start_marker", 0.0)
+                            end_marker = params.get("end_marker", 0.0)
+                            result = self._set_arrangement_clip_markers(
+                                track_index, clip_index, start_marker, end_marker
                             )
 
                         # Put the result in the queue
@@ -1061,7 +1106,8 @@ class AbletonMCP(ControlSurface):
 
         Each clip dict contains:
           name, start_time, end_time, length, color,
-          is_midi_clip, is_audio_clip, is_playing
+          is_midi_clip, is_audio_clip, is_playing,
+          gain (audio clips only)
         """
         try:
             if track_index < 0 or track_index >= len(self._song.tracks):
@@ -1072,18 +1118,58 @@ class AbletonMCP(ControlSurface):
 
             # track.arrangement_clips is available in Live 11 / 12
             for clip in track.arrangement_clips:
-                clips.append(
-                    {
-                        "name": clip.name,
-                        "start_time": clip.start_time,
-                        "end_time": clip.end_time,
-                        "length": clip.length,
-                        "color": clip.color,
-                        "is_midi_clip": clip.is_midi_clip,
-                        "is_audio_clip": clip.is_audio_clip,
-                        "is_playing": clip.is_playing,
-                    }
-                )
+                clip_info = {
+                    "name": clip.name,
+                    "start_time": clip.start_time,
+                    "end_time": clip.end_time,
+                    "length": clip.length,
+                    "color": clip.color,
+                    "is_midi_clip": clip.is_midi_clip,
+                    "is_audio_clip": clip.is_audio_clip,
+                    "is_playing": clip.is_playing,
+                }
+                if clip.is_audio_clip:
+                    try:
+                        clip_info["gain"] = clip.gain
+                    except Exception:
+                        clip_info["gain"] = 0.0
+                    try:
+                        clip_info["pitch_coarse"] = clip.pitch_coarse
+                    except Exception:
+                        clip_info["pitch_coarse"] = 0
+                    try:
+                        clip_info["pitch_fine"] = clip.pitch_fine
+                    except Exception:
+                        clip_info["pitch_fine"] = 0
+                    try:
+                        clip_info["warp_on"] = clip.warp_on
+                    except Exception:
+                        clip_info["warp_on"] = False
+                    try:
+                        clip_info["warp_mode"] = clip.warp_mode
+                    except Exception:
+                        clip_info["warp_mode"] = 0
+                    try:
+                        clip_info["start_marker"] = clip.start_marker
+                    except Exception:
+                        clip_info["start_marker"] = 0.0
+                    try:
+                        clip_info["end_marker"] = clip.end_marker
+                    except Exception:
+                        clip_info["end_marker"] = 0.0
+                    try:
+                        clip_info["loop_on"] = clip.looping
+                    except Exception:
+                        clip_info["loop_on"] = False
+                    try:
+                        clip_info["loop_start"] = clip.loop_start
+                    except Exception:
+                        clip_info["loop_start"] = 0.0
+                    try:
+                        clip_info["loop_end"] = clip.loop_end
+                    except Exception:
+                        clip_info["loop_end"] = 0.0
+                clips.append(clip_info)
 
             return {
                 "track_index": track_index,
@@ -1093,6 +1179,107 @@ class AbletonMCP(ControlSurface):
             }
         except Exception as e:
             self.log_message("Error getting arrangement clips: " + str(e))
+            raise
+
+    def _set_arrangement_clip_gain(self, track_index, clip_index, gain):
+        """Set the gain (in dB) of an arrangement audio clip."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+
+            track = self._song.tracks[track_index]
+            clips = list(track.arrangement_clips)
+
+            if clip_index < 0 or clip_index >= len(clips):
+                raise IndexError("Arrangement clip index out of range")
+
+            clip = clips[clip_index]
+            if not clip.is_audio_clip:
+                raise ValueError("Clip is not an audio clip")
+
+            clip.gain = float(gain)
+
+            return {
+                "track_index": track_index,
+                "name": clip.name,
+                "gain": clip.gain,
+            }
+        except Exception as e:
+            self.log_message("Error setting arrangement clip gain: " + str(e))
+            raise
+
+    def _set_arrangement_clip_pitch(self, track_index, clip_index, coarse, fine):
+        """Set pitch of an arrangement audio clip (coarse: ±48 semitones, fine: ±50 cents)."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            clips = list(track.arrangement_clips)
+            if clip_index < 0 or clip_index >= len(clips):
+                raise IndexError("Arrangement clip index out of range")
+            clip = clips[clip_index]
+            if not clip.is_audio_clip:
+                raise ValueError("Clip is not an audio clip")
+            clip.pitch_coarse = int(coarse)
+            clip.pitch_fine = int(fine)
+            return {
+                "track_index": track_index,
+                "name": clip.name,
+                "pitch_coarse": clip.pitch_coarse,
+                "pitch_fine": clip.pitch_fine,
+            }
+        except Exception as e:
+            self.log_message("Error setting arrangement clip pitch: " + str(e))
+            raise
+
+    def _set_arrangement_clip_warp(self, track_index, clip_index, warp_on, warp_mode=0):
+        """Set warp state of an arrangement audio clip."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            clips = list(track.arrangement_clips)
+            if clip_index < 0 or clip_index >= len(clips):
+                raise IndexError("Arrangement clip index out of range")
+            clip = clips[clip_index]
+            if not clip.is_audio_clip:
+                raise ValueError("Clip is not an audio clip")
+            clip.warp_on = bool(warp_on)
+            clip.warp_mode = int(warp_mode)
+            return {
+                "track_index": track_index,
+                "name": clip.name,
+                "warp_on": clip.warp_on,
+                "warp_mode": clip.warp_mode,
+            }
+        except Exception as e:
+            self.log_message("Error setting arrangement clip warp: " + str(e))
+            raise
+
+    def _set_arrangement_clip_markers(
+        self, track_index, clip_index, start_marker, end_marker
+    ):
+        """Set start/end markers of an arrangement audio clip."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            clips = list(track.arrangement_clips)
+            if clip_index < 0 or clip_index >= len(clips):
+                raise IndexError("Arrangement clip index out of range")
+            clip = clips[clip_index]
+            if not clip.is_audio_clip:
+                raise ValueError("Clip is not an audio clip")
+            clip.start_marker = float(start_marker)
+            clip.end_marker = float(end_marker)
+            return {
+                "track_index": track_index,
+                "name": clip.name,
+                "start_marker": clip.start_marker,
+                "end_marker": clip.end_marker,
+            }
+        except Exception as e:
+            self.log_message("Error setting arrangement clip markers: " + str(e))
             raise
 
     def _duplicate_session_clip_to_arrangement(
@@ -2521,6 +2708,28 @@ class AbletonMCP(ControlSurface):
             self.log_message("Error setting output routing: " + str(e))
             raise
 
+    def _set_track_solo(self, track_index, solo):
+        """Set a track's solo state."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            self._song.tracks[track_index].solo = bool(solo)
+            return {"track_index": track_index, "solo": bool(solo)}
+        except Exception as e:
+            self.log_message("Error setting track solo: " + str(e))
+            raise
+
+    def _set_track_mute(self, track_index, mute):
+        """Set a track's mute state."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            self._song.tracks[track_index].mute = bool(mute)
+            return {"track_index": track_index, "mute": bool(mute)}
+        except Exception as e:
+            self.log_message("Error setting track mute: " + str(e))
+            raise
+
     # ═══════════════════════════════════════════════════════════════
     # Master track
     # ═══════════════════════════════════════════════════════════════
@@ -2753,8 +2962,8 @@ class AbletonMCP(ControlSurface):
     def _set_arrangement_clip_envelope(self, track_index, clip_index, target, points):
         """Set modulation envelope on an arrangement clip.
 
-        Workaround: create and apply envelope on a temp session clip,
-        then duplicate to arrangement. The duplicate carries the envelope."""
+        For MIDI clips: uses a temp session clip workaround (duplicate → envelope → delete).
+        For audio clips: applies envelope directly on the arrangement clip."""
         try:
             if track_index < 0 or track_index >= len(self._song.tracks):
                 raise IndexError("Track index out of range")
@@ -2765,25 +2974,39 @@ class AbletonMCP(ControlSurface):
                 raise IndexError("Arrangement clip index out of range")
             src_clip = clips[clip_index]
 
-            length = src_clip.length
-            start_time = src_clip.start_time
-            raw_notes = src_clip.get_notes(0.0, 0, length, 127)
-            live_notes = tuple(raw_notes)
+            if not points:
+                return {"point_count": 0}
 
-            temp_slot = None
-            for i in range(len(track.clip_slots)):
-                if not track.clip_slots[i].has_clip:
-                    temp_slot = track.clip_slots[i]
-                    break
-            if temp_slot is None:
-                raise Exception("No empty session clip slot available")
+            # Check if it's an audio clip
+            is_audio = hasattr(src_clip, "is_audio_clip") and src_clip.is_audio_clip
 
-            temp_slot.create_clip(length)
-            if live_notes:
-                temp_slot.clip.set_notes(live_notes)
+            if is_audio:
+                # Audio arrangement clips support create_automation_envelope directly
+                env = src_clip.create_automation_envelope(param)
+                for p in points:
+                    t = float(p["time"])
+                    v = float(p["value"])
+                    d = float(p.get("duration", 0.0))
+                    env.insert_step(t, v, d)
+                return {"point_count": len(points), "method": "direct_audio"}
+            else:
+                # MIDI clip workaround: temp session clip → envelope → duplicate back
+                length = src_clip.length
+                start_time = src_clip.start_time
+                live_notes = tuple(src_clip.get_notes(0.0, 0, length, 127))
 
-            # Apply envelope to TEMP SESSION clip (only session clips support this)
-            if points:
+                temp_slot = None
+                for i in range(len(track.clip_slots)):
+                    if not track.clip_slots[i].has_clip:
+                        temp_slot = track.clip_slots[i]
+                        break
+                if temp_slot is None:
+                    raise Exception("No empty session clip slot available")
+
+                temp_slot.create_clip(length)
+                if live_notes:
+                    temp_slot.clip.set_notes(live_notes)
+
                 env = temp_slot.clip.create_automation_envelope(param)
                 for p in points:
                     t = float(p["time"])
@@ -2791,15 +3014,16 @@ class AbletonMCP(ControlSurface):
                     d = float(p.get("duration", 0.0))
                     env.insert_step(t, v, d)
 
-            track.delete_clip(src_clip)
-            track.duplicate_clip_to_arrangement(temp_slot.clip, float(start_time))
-            temp_slot.delete_clip()
+                track.delete_clip(src_clip)
+                track.duplicate_clip_to_arrangement(temp_slot.clip, float(start_time))
+                temp_slot.delete_clip()
 
-            return {
-                "point_count": len(points) if points else 0,
-                "start_time": start_time,
-                "length": length,
-            }
+                return {
+                    "point_count": len(points),
+                    "start_time": start_time,
+                    "length": length,
+                    "method": "temp_midi",
+                }
         except Exception as e:
             self.log_message("Error setting arrangement clip envelope: " + str(e))
             raise
