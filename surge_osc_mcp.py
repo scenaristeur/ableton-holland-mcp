@@ -17,8 +17,11 @@ Peut être lancé indépendamment ou importé depuis ableton_full_mcp_server.py.
 
 from __future__ import annotations
 
+import json
+import os
 import time
 import threading
+from pathlib import Path
 from typing import Any
 
 from pythonosc import udp_client
@@ -31,6 +34,70 @@ SURGE_IP = "127.0.0.1"
 BASE_PORT_IN = 53280
 PORT_STRIDE = 2
 MAX_INSTANCES = 8
+
+# ── Patches index constants ─────────────────────────────────────────────────
+
+SURGE_DATA_DIRS = [
+    "C:/Program Files/Common Files/VST3/Surge Synth Team/SurgeXTData",
+    os.environ.get("SURGE_XT_DATA", ""),
+]
+UTIL_DATA_DIR = Path(__file__).parent / "data" / "util_data"
+INDEX_FILE = UTIL_DATA_DIR / "patches_index.json"
+
+_patches_index: dict[str, dict[str, str]] | None = None
+
+
+def _scan_patches() -> dict[str, dict[str, str]]:
+    """Scan Surge patches directories and build category -> name -> path index."""
+    index: dict[str, dict[str, str]] = {}
+    for base in SURGE_DATA_DIRS:
+        if not base:
+            continue
+        for root in ("patches_factory", "patches_3rdparty"):
+            folder = Path(base) / root
+            if not folder.is_dir():
+                continue
+            for fxp in folder.rglob("*.fxp"):
+                category = fxp.parent.name
+                name = fxp.stem
+                if category not in index:
+                    index[category] = {}
+                index[category][name] = str(fxp.with_suffix(""))
+    return index
+
+
+def _load_patches_index() -> dict[str, dict[str, str]]:
+    """Load or build the patches index, cached in JSON."""
+    global _patches_index
+    if _patches_index is not None:
+        return _patches_index
+
+    if INDEX_FILE.is_file():
+        with open(INDEX_FILE, encoding="utf-8") as f:
+            _patches_index = json.load(f)
+            assert _patches_index is not None
+            return _patches_index
+
+    _patches_index = _scan_patches()
+    UTIL_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with open(INDEX_FILE, "w", encoding="utf-8") as f:
+        json.dump(_patches_index, f, indent=2, ensure_ascii=False)
+    assert _patches_index is not None
+    return _patches_index
+
+
+def _rebuild_patches_index() -> dict[str, dict[str, str]]:
+    """Force rebuild the patches index from disk."""
+    global _patches_index
+    _patches_index = _scan_patches()
+    UTIL_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with open(INDEX_FILE, "w", encoding="utf-8") as f:
+        json.dump(_patches_index, f, indent=2, ensure_ascii=False)
+    return _patches_index
+
+
+# Build the index at import time
+_load_patches_index()
 
 
 def _ports_for_instance(instance: int) -> tuple[int, int]:
@@ -152,6 +219,68 @@ def surge_random_patch(instance: int = 0) -> dict:
     """Load a random patch on a Surge XT instance."""
     osc_send(instance, "/patch/random")
     return _get_patch(instance)
+
+
+@app.tool()
+def surge_list_categories() -> list[str]:
+    """List all available Surge XT patch categories.
+
+    Returns category names from both patches_factory and patches_3rdparty,
+    sorted alphabetically.
+
+    Example return: ["Basses", "Drums", "Leads", "Pads", "Plucks", ...]
+    """
+    index = _load_patches_index()
+    return sorted(index.keys())
+
+
+@app.tool()
+def surge_list_patches(category: str) -> list[dict]:
+    """List all patches in a given Surge XT category.
+
+    Args:
+        category: Category name (e.g. "Basses", "Plucks", "Pads"). Case-sensitive.
+
+    Returns list of {"name": "Patch Name", "path": "absolute/path/without/extension"}.
+    """
+    index = _load_patches_index()
+    patches = index.get(category, {})
+    return [{"name": name, "path": path} for name, path in sorted(patches.items())]
+
+
+@app.tool()
+def surge_search_patches(query: str) -> list[dict]:
+    """Search Surge XT patches by name (case-insensitive).
+
+    Searches across ALL categories. Matches if query is a substring of the patch name.
+
+    Args:
+        query: Search term (e.g. "bass", "warm", "lead")
+
+    Returns list of {"category": "...", "name": "...", "path": "..."}.
+    """
+    index = _load_patches_index()
+    q = query.lower()
+    results = []
+    for cat, patches in index.items():
+        for name, path in patches.items():
+            if q in name.lower():
+                results.append({"category": cat, "name": name, "path": path})
+    return sorted(results, key=lambda r: r["category"] + r["name"])
+
+
+@app.tool()
+def surge_rebuild_index() -> dict:
+    """Force rebuild the patches index from disk (rescans all .fxp files)."""
+    idx = _rebuild_patches_index()
+    cat_count = len(idx)
+    patch_count = sum(len(p) for p in idx.values())
+    return {
+        "status": "ok",
+        "categories": cat_count,
+        "patches": patch_count,
+        "file": str(INDEX_FILE),
+    }
 
 
 @app.tool()

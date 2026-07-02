@@ -56,7 +56,7 @@ Buffer Voicemeeter : 1024 samples pour stabilité
 | `delete_track(index)` | Supprimer une piste |
 | `duplicate_track(index)` | Dupliquer une piste |
 | `select_track(index)` | Sélectionner une piste (UI focus) |
-| `get_track_color(index)` / `set_track_color(index, color)` | Couleur piste (0–255) |
+| `get_track_color(index)` / `set_track_color(index, color)` | Couleur piste (entier RGB 24-bit, ex: `0xFF8800` = `16744448`) |
 
 ### Clips Session
 | Tool | Description |
@@ -154,6 +154,10 @@ Buffer Voicemeeter : 1024 samples pour stabilité
 | `surge_load_patch(path, instance=0)` | Charger un patch (path absolu sans extension) |
 | `surge_incr_patch(instance=0)` / `surge_decr_patch(instance=0)` | Patch suivant/précédent |
 | `surge_random_patch(instance=0)` | Patch aléatoire |
+| `surge_list_categories()` | Lister toutes les catégories disponibles (Basses, Plucks, Pads, Leads, etc.) |
+| `surge_list_patches(category)` | Lister les patches d'une catégorie (retourne nom + path) |
+| `surge_search_patches(query)` | Chercher un patch par nom (insensible à la casse, toutes catégories) |
+| `surge_rebuild_index()` | Re-scanner le disque et reconstruire l'index des patches |
 
 ### Paramètres
 | Tool | Description |
@@ -181,7 +185,9 @@ Buffer Voicemeeter : 1024 samples pour stabilité
 /param/a/play_mode         /param/a/osc/fm_depth       /param/a/waveshaper/drive
 ```
 
-**Note :** `surge_load_patch` convertit automatiquement les `/` en `\` (Windows) pour éviter l'affichage du chemin complet dans Surge XT. L'OSC doit être activé dans Surge XT (Settings → OSC → Enable). Par défaut port IN 53280, OUT 53281. Jusqu'à 8 instances Surge XT supportées (ports : 53280-53295, stride=2).
+**Note :** `surge_load_patch` convertit automatiquement les `/` en `\` (Windows) pour éviter l'affichage du chemin complet dans Surge XT. **Attention :** la valeur de retour peut montrer un ancien template name (ex: "Init Modern") même si le patch s'est chargé — toujours vérifier avec `surge_get_patch(instance)` pour confirmer le patch réel.
+
+L'OSC doit être activé dans Surge XT (Settings → OSC → Enable). Par défaut port IN 53280, OUT 53281. Jusqu'à 8 instances Surge XT supportées (ports : 53280-53295, stride=2).
 
 ### Configuration OSC dans Surge XT
 
@@ -204,6 +210,59 @@ Surge XT intègre 4 slots FX par chaîne (A/B), accessibles via :
 /param/fx/global/1..4/type /param/fx/global/1..4/param1..12
 ```
 `type=0` = pas d'effet, `type>=1` = effet sélectionné selon l'index.
+
+**Important :** Configurer Surge XT (patches, paramètres, oscillateurs, LFO, filtres) UNIQUEMENT via les outils `surge-osc` MCP (`surge_load_patch`, `surge_set_param`, etc.). Ne pas utiliser de commandes système (bash, glob, read) pour manipuler Surge XT — tout passe par OSC.
+
+### Workflow : Charger des patches factory existants
+
+La meilleure approche pour une base de travail solide est de charger des **patches factory pré-configurés** plutôt que de tweeter Init Saw manuellement.
+
+1. **Explorer les catégories** disponibles (utiliser `surge_list_categories()`) :
+   ```
+   Basses, Brass, Chords, FX, Keys, Leads, MPE, Pads,
+   Percussion, Plucks, Polysynths, Sequences, Splits,
+   Templates, Tutorials, Vocoder, Winds
+   ```
+2. **Lister les patches** d'une catégorie avec `surge_list_patches("Basses")` (retourne nom + path).
+3. **Chercher un patch** par mot-clé avec `surge_search_patches("warm")` (insensible à la casse, toutes catégories).
+4. **Charger chaque instance Surge XT** avec un patch adapté à son rôle musical :
+   ```python
+   surge_load_patch("C:/Program Files/.../patches_factory/Basses/Rubber Bass", instance=0)
+   surge_load_patch("C:/Program Files/.../patches_factory/Plucks/Clean", instance=1)
+   surge_load_patch("C:/Program Files/.../patches_factory/Pads/MKS-70 Warm Pad", instance=2)
+   surge_load_patch("C:/Program Files/.../patches_factory/Leads/Moogy Saw", instance=3)
+   surge_load_patch("C:/Program Files/.../patches_factory/Percussion/Synth Tom 1", instance=4)
+   ```
+   - Utiliser des **forward slashes** `C:/...` (le serveur convertit automatiquement en `\`)
+   - Path absolu sans extension (pas de `.fxp`)
+   - Le retour de `surge_load_patch` peut montrer un **template name obsolète** — ignorer cette valeur
+
+5. **Vérifier le patch réellement chargé** avec `surge_get_patch(instance)` — c'est la source de vérité.
+
+6. **Réchauffer le mix** avec Auto Filter (LP) sur les pistes brillantes (EQ Eight n'existe pas dans Live Lite) :
+   ```python
+   load_instrument_or_effect(track, "query:AudioFx#Auto%20Filter")
+   set_device_parameter(track, device_index=1, "Frequency", 0.35)  # LP cutoff
+   set_device_parameter(track, device_index=1, "Filter Type", 0)    # Low-pass
+   ```
+   Fréquences LP recommandées : Lead 0.3-0.35, Guitare 0.35-0.4, Nappes 0.4-0.45
+
+7. **Ajuster les volumes** pour équilibrer : Basse ~0.85-0.9, Guitare ~0.75-0.8, Nappes ~0.65-0.7, Lead ~0.5-0.6, Percs ~0.6-0.65, Drums ~1.0
+
+8. **Capturer + analyser** pour valider le centroid (cible 700-900 Hz) :
+   ```python
+   capture_and_analyze(position_beats=48, duration_sec=20)  # refrain
+   # Vérifier spectral_centroid_hz, energy_rms, dynamic_range_db
+   ```
+
+### Sélection de patches par style musical
+
+| Style | Basse | Guitare/Pluck | Pad | Lead | Percs |
+|---|---|---|---|---|---|
+| Funky/Groovy | `Rubber Bass`, `Fingered` | `Clean`, `E-Guitar` | `MKS-70 Warm Pad`, `Pad 3` | `Moogy Saw`, `Sine Lead` | `Synth Tom 1`, `Drum One` |
+| Pop/Organique | `E-Bass`, `Mellow` | `Woody`, `Guitar` | `Subtle Comb Strings`, `Sunday` | `Classic Lead 2`, `Soft Sync Saw` | `Synth Tom 2` |
+| Électronique | `FM Bass 1`, `Digibass` | `Sync Pluck`, `FM Pluck` | `Flux Capacitor`, `Xbox 1` | `Classic Lead 1`, `Acidofil` | `Kick 909ish`, `Kick Tech 1` |
+| Cinématique | `Sub 2`, `Deep End` | `Ambient E-Guitar`, `Bell 1` | `Ghost Pad`, `Still` | `Vocal Lead`, `FM Is Growing On Me` | `Verber` |
 
 ## Outils Music Analysis disponibles
 
