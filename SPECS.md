@@ -1,33 +1,23 @@
 # SPECS — Futures évolutions
 
-## Sample Clip Parameters (Audio Arrangement Clips)
+## ✅ Réalisées
 
-Ajouter l'accès aux paramètres du Sample dans la Clip View : pitch, warp, start/end.
+- `_get_arrangement_clips` étendu avec pitch_coarse, pitch_fine, warp_on, warp_mode, start_marker, end_marker, loop_on, loop_start, loop_end
+- `set_arrangement_clip_pitch(track, clip, coarse, fine)` — transposition
+- `set_arrangement_clip_warp(track, clip, warp_on, warp_mode)` — warp
+- `set_arrangement_clip_markers(track, clip, start_marker, end_marker)` — markers
+- `create_audio_clip(track, slot, path)` — import audio WAV
+- `set_track_solo(index, solo)` / `set_track_mute(index, mute)` — solo/mute
+- `set_arrangement_clip_envelope` fixé pour clips audio (bypass session clip workaround)
 
-### Remote Script — `_get_arrangement_clips` extend
-Ajouter au dict clip :
-```python
-"pitch_coarse": clip.pitch_coarse,       # -48 to 48 semitones
-"pitch_fine": clip.pitch_fine,           # -50 to 50 cents
-"warp_on": clip.warp_on,                 # bool
-"warp_mode": clip.warp_mode,             # enum
-"start_marker": clip.start_marker,       # sample start (beats)
-"end_marker": clip.end_marker,           # sample end (beats)
-"loop_on": clip.looping,                 # bool
-"loop_start": clip.loop_start,
-"loop_end": clip.loop_end,
-```
+## Idées futures
 
-### Remote Script — Setters à ajouter
-- `_set_arrangement_clip_pitch(track_index, clip_index, coarse, fine)`
-- `_set_arrangement_clip_warp(track_index, clip_index, warp_on, warp_mode)`
-- `_set_arrangement_clip_markers(track_index, clip_index, start_marker, end_marker)`
+### Automation clip audio
+- Lire/écrire les courbes d'automation sur les clips audio via l'API (actuellement limité)
 
-### MCP Server — Tools à ajouter
-```python
-set_arrangement_clip_pitch(track_index, clip_index, coarse, fine)
-set_arrangement_clip_warp(track_index, clip_index, warp_on, warp_mode)
-set_arrangement_clip_markers(track_index, clip_index, start_marker, end_marker)
-```
+### Paramètres sample (warp markers)
+- Ajouter/modifier les warp markers individuels (pas juste start/end)
+- Stretch mode par défaut
 
-Tests : capturer un clip isolé (solo) avant/après modification pour vérifier l'impact sur RMS/centroid.
+### Export
+- Tool `export_audio()` pour lancer l'export d'Ableton (si l'API le permet)

@@ -49,6 +49,8 @@ Buffer Voicemeeter : 1024 samples pour stabilité
 |---|---|
 | `create_midi_track(index=-1)` | Créer piste MIDI (index -1 = fin) |
 | `set_track_name(index, name)` | Renommer "1-Nom", "2-Nom"... |
+| `set_track_solo(index, solo)` | Solo on/off (True/False) |
+| `set_track_mute(index, mute)` | Mute on/off (True/False) |
 | `freeze_track(index)` | Freeze une piste |
 | `flatten_track(index)` | Flatten une piste frozen |
 | `delete_track(index)` | Supprimer une piste |
@@ -88,8 +90,11 @@ Buffer Voicemeeter : 1024 samples pour stabilité
 |---|---|
 | `switch_to_arrangement_view()` | Basculer en vue Arrangement |
 | `set_arrangement_time(time)` | Positionner le playhead (beats) |
-| `get_arrangement_clips(track)` | Lister les clips dans l'arrangement |
+| `get_arrangement_clips(track)` | Lister les clips dans l'arrangement (retourne aussi pitch_coarse, pitch_fine, warp_on, warp_mode, start_marker, end_marker, loop_on, loop_start, loop_end pour les clips audio) |
 | `set_arrangement_clip_gain(track, clip_index, gain)` | Régler le gain (dB) d'un clip audio arrangement |
+| `set_arrangement_clip_pitch(track, clip_index, coarse, fine)` | Transposer (±48 semi-tons, ±50 cents) |
+| `set_arrangement_clip_warp(track, clip_index, warp_on, warp_mode)` | Warp on/off + mode (0=beats, 1=tones, 2=textures, 3=re-pitch, 4=complex, 5=complex-pro) |
+| `set_arrangement_clip_markers(track, clip_index, start_marker, end_marker)` | Début/fin du sample (en beats) |
 | `duplicate_to_arrangement(track, slot, dest_time)` | Copier clip Session → Arrangement |
 | `get_arrangement_clip_notes(track, index)` | Lire notes MIDI d'un clip arrangement |
 
@@ -239,6 +244,35 @@ create_clip(track, slot, length) → add_notes_to_clip → set_clip_name → fir
 ```
 switch_to_arrangement_view → duplicate_to_arrangement × N → get_arrangement_clips → start_playback
 ```
+
+### Analyser une piste en solo
+
+```python
+# 1. Solo la piste
+set_track_solo(track_index=2)     # True = solo on
+# 2. Capturer au refrain
+capture_and_analyze(position_beats=64, duration_sec=15, output_name="solo_voix")
+# 3. Lire les métriques (RMS, centroid, rolloff, DR)
+# 4. Unsolo
+set_track_solo(track_index=2, solo=False)
+```
+
+Répéter pour chaque piste pour voir sa contribution individuelle. Comparer les RMS pour détecter les déséquilibres.
+
+### Analyser une sélection de pistes (plusieurs pistes ensemble)
+
+```python
+# 1. Solo chaque piste à analyser
+set_track_solo(track_index=0, solo=True)    # Drums
+set_track_solo(track_index=1, solo=True)    # Bass
+# 2. Capturer
+capture_and_analyze(position_beats=64, duration_sec=15, output_name="drums_bass_only")
+# 3. Unsolo tout
+set_track_solo(track_index=0, solo=False)
+set_track_solo(track_index=1, solo=False)
+```
+
+Les pistes avec `solo=True` sont les seules audibles. Simple et efficace pour comparer des groupes (ex: section rythmique vs mélodie).
 
 ### Analyser le mix (workflow obligatoire)
 **Important :** `set_arrangement_time` retourne des valeurs obsolètes (lit l'ancienne position). Toujours vérifier avec `get_session_info`.  
