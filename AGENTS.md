@@ -446,11 +446,19 @@ Les erreurs `MCP error -32001 (Request timed out)` surviennent principalement da
 
 ### 1. `capture_ableton` / `capture_and_analyze`
 - **Cause :** la capture bloque pendant `duration` secondes. Si la durée est > 15-20 s, le timeout du serveur MCP peut être atteint avant la fin.
-- **Solution :** utiliser `duration ≤ 15` pour la capture, puis traiter l'analyse séparément si besoin. Exemple :
+- **Solution :** utiliser `duration ≤ 20` pour la capture, puis traiter l'analyse séparément si besoin. Exemple :
   ```
-  capture_ableton(duration=10)     # ne pas dépasser 15s
-  analyze_full(y_path)              # analyse légère, rapide
+  capture_and_analyze(duration=20)  # max 20s
   ```
+- **Pour capturer > 20s** : faire 2 captures qui se chevauchent :
+  ```
+  capture_and_analyze(position_beats=0, duration_sec=20, output_name="part1")
+  capture_and_analyze(position_beats=30, duration_sec=20, output_name="part2")
+  # Overlap de 10s (30 beats ÷ 1.5 = 20s à 150 BPM)
+  ```
+  Calcul de l'overlap : `position_beats = duration_sec × (bpm / 60) - overlap_desired_beats`
+  Exemple à 120 BPM : 20s = 40 beats, overlap 10 beats → position 30
+  Exemple à 150 BPM : 20s = 50 beats, overlap 10 beats → position 40
 - **Si la capture renvoie « audio is silence » :** vérifier que l'Output Device d'Ableton pointe bien sur « CABLE Input (VB-Audio Virtual Cable) » et que la lecture est active.
 
 ### 2. `load_instrument_or_effect`
@@ -462,8 +470,83 @@ Les erreurs `MCP error -32001 (Request timed out)` surviennent principalement da
 
 ### 3. Règle générale
 - Toujours utiliser `timeout` param si disponible (certains outils MCP acceptent `timeout` en ms dans l'appel).
-- Éviter les `duration` > 30 pour les captures audio (préférer des captures courtes et successives).
+- Éviter les `duration` > 20 pour les captures audio (préférer des captures courtes de 20s qui se chevauchent).
 - Si le problème persiste, consulter : https://mcpcat.io/guides/fixing-mcp-error-32001-request-timeout
+
+## Mix Translation — Faire passer un son partout
+
+Problème : un mix qui sonne bien sur le casque Ableton disparaît sur téléphone, réseaux sociaux, ou en MP3. Voici les règles et méthodes pour un mix qui translate.
+
+### Causes principales
+
+1. **Basse sub** (< 80 Hz) — les haut-parleurs téléphone ne la reproduisent pas
+2. **Pas d'harmoniques** sur la basse — rien d'audible en médiums pour "évoquer" la note
+3. **Éléments trop bas** dans le mix — perdus par la compression MP3/réseaux sociaux
+4. **Pas de master processing** — le mix manque de glue et de loudness
+5. **Accumulation de graves** — boue dans le bas-médium (200-400 Hz)
+
+### Règles de translation (testées sur RudeGirl)
+
+#### 1. Saturator sur la basse (obligatoire)
+Créer des harmoniques audibles sur petits haut-parleurs :
+```
+Type: Medium Curve (3)
+Drive: 0.60-0.80
+Dry/Wet: 1.0 (full wet)
+Color On: 1.0
+```
+La distorsion génère des partiels dans les médiums qui "évoquent" la note de basse même sans sub.
+
+#### 2. Compression sur les drums (glue rythmique)
+```
+Threshold: 0.30 (~-24 dB)
+Ratio: 0.50 (~4:1)
+Attack: 0.10-0.15 (fast — garde le transient)
+Model: Peak (0)
+Makeup: On
+```
+Les drums compressés restent punchy sur tous les systèmes.
+
+#### 3. Aucun élément sous 0.70
+Les éléments discrets (FX, pads, textures, stabs) à volume < 0.70 disparaissent dans la compression MP3/réseaux sociaux. Les monter à 0.70-0.80 minimum.
+
+#### 4. Send reverb comme glue
+Reverb modérée (0.10-0.25) sur plusieurs pistes unifie le mix. La reverb adoucit les transitions quand le codec MP3 coupe les extrêmes fréquentiels.
+
+#### 5. Vérifier le spectral centroid
+Cible sur capture analysis :
+- 700-900 Hz : mix équilibré
+- < 700 Hz : trop de graves, boueux
+- > 1000 Hz : trop aigu, agressif
+
+#### 6. Master Limiter (manuel — pas via API)
+L'API Live Lite **ne permet pas** d'accéder au master track. Ajouter manuellement :
+1. Ouvrir Ableton → sélectionner Master track
+2. Glisser Limiter → choisir preset "Maximizer" (push à -1 dB ceiling)
+3. Ajuster le gain jusqu'à -6 dB de réduction max
+
+### Cibles par plateforme
+
+| Plateforme | Loudness | Codec | Risques |
+|---|---|---|---|
+| Spotify | -14 LUFS | Ogg Vorbis 320k | Normalisation coupe les dynamiques extrêmes |
+| YouTube | -13 LUFS | AAC 128-256k | Compression agressive, perte de détails |
+| TikTok/Insta | ~-14 LUFS | AAC 128k | Basse inexistante, voix saturée si trop chaude |
+| Téléphone | N/A | Variable | Pas de < 100 Hz → basse invisible |
+| Casque (Ableton) | Brut | PCM | Tout s'entend → illusion de bon mix |
+
+### Workflow de vérification
+
+1. Ajuster le mix dans Ableton
+2. Capturer 20s : `capture_and_analyze(position_beats=0, duration_sec=20)`
+3. Vérifier les métriques :
+   - `energy_rms` > 0.20 (assez fort)
+   - `dynamic_range_db` < 12 (compressé pour MP3)
+   - `spectral_centroid_hz` 700-900 (équilibré)
+   - `spectral_rolloff_hz` > 1200 (assez d'aigus)
+4. Si besoin, capturer 20s supplémentaires à une autre position (overlap 10s min)
+5. Itérer jusqu'à résultats satisfaisants
+6. Dire à l'utilisateur d'exporter en WAV 48kHz 24-bit, puis convertir en MP3 320k
 
 ## Remote Script Installation
 

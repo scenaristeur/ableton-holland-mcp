@@ -642,12 +642,52 @@ def set_arrangement_clip_envelope(
     )
 
 
+# ── Master Track ──────────────────────────────────────────────────────────────
+
+
+@app.tool()
+def get_master_track() -> dict[str, Any]:
+    """Get master track info: volume, pan, devices."""
+    return _cmd("get_master_track")
+
+
+@app.tool()
+def set_master_volume(value: float) -> dict[str, Any]:
+    """Set master track volume (0.0–1.0)."""
+    return _cmd("set_master_volume", value=value)
+
+
+@app.tool()
+def get_master_device_parameters(device_index: int) -> dict[str, Any]:
+    """Read all parameters of a device on the master track."""
+    return _cmd("get_master_device_parameters", device_index=device_index)
+
+
+@app.tool()
+def set_master_device_parameter(
+    device_index: int, parameter_name: str, value: float
+) -> dict[str, Any]:
+    """Set a device parameter value on the master track."""
+    return _cmd(
+        "set_master_device_parameter",
+        device_index=device_index,
+        parameter_name=parameter_name,
+        value=value,
+    )
+
+
+@app.tool()
+def load_instrument_or_effect_on_master(uri: str) -> dict[str, Any]:
+    """Load an instrument/effect onto the master track by URI."""
+    return _cmd("load_browser_item_on_master", uri=uri)
+
+
 # ============================================================================
 # ── MUSIC ANALYSIS TOOLS (with atomic capture_at_position) ──────────────────
 # ============================================================================
 
 
-#@app.tool()
+# @app.tool()
 async def capture_ableton(
     duration: float = 15.0,
     output_name: str | None = None,
@@ -750,7 +790,7 @@ def _ableton_stop_and_seek(position_beats: float) -> dict:
     }
 
 
-#@app.tool()
+# @app.tool()
 async def capture_at_position(
     position_beats: float,
     duration_sec: float = 10.0,

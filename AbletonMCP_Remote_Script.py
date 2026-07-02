@@ -289,6 +289,8 @@ class AbletonMCP(ControlSurface):
                 # Master
                 "set_master_volume",
                 "set_master_panning",
+                "set_master_device_parameter",
+                "load_browser_item_on_master",
                 # Clip envelopes (modulation)
                 "get_clip_envelope",
                 "set_clip_envelope",
@@ -513,6 +515,16 @@ class AbletonMCP(ControlSurface):
                         elif command_type == "set_master_panning":
                             value = params.get("value", 0.0)
                             result = self._set_master_panning(value)
+                        elif command_type == "set_master_device_parameter":
+                            device_index = params.get("device_index", 0)
+                            parameter_name = params.get("parameter_name", "")
+                            value = params.get("value", 0.0)
+                            result = self._set_master_device_parameter(
+                                device_index, parameter_name, value
+                            )
+                        elif command_type == "load_browser_item_on_master":
+                            item_uri = params.get("uri", "")
+                            result = self._load_browser_item_on_master(item_uri)
                         elif command_type == "set_track_volume":
                             track_index = params.get("track_index", 0)
                             value = params.get("value", 0.85)
@@ -647,6 +659,9 @@ class AbletonMCP(ControlSurface):
             # ── Master track ───────────────────────────────────────────────────
             elif command_type == "get_master_track":
                 response["result"] = self._get_master_track()
+            elif command_type == "get_master_device_parameters":
+                device_index = params.get("device_index", 0)
+                response["result"] = self._get_master_device_parameters(device_index)
             else:
                 response["status"] = "error"
                 response["message"] = "Unknown command: " + command_type
@@ -2511,15 +2526,106 @@ class AbletonMCP(ControlSurface):
     # ═══════════════════════════════════════════════════════════════
 
     def _get_master_track(self):
-        """Get master track info: volume, pan"""
+        """Get master track info: volume, pan, devices"""
         try:
             master = self._song.master_track
+            devices = []
+            for device_index, device in enumerate(master.devices):
+                devices.append(
+                    {
+                        "index": device_index,
+                        "name": device.name,
+                        "class_name": device.class_name,
+                        "type": self._get_device_type(device),
+                    }
+                )
             return {
                 "volume": master.mixer_device.volume.value,
                 "panning": master.mixer_device.panning.value,
+                "devices": devices,
             }
         except Exception as e:
             self.log_message("Error getting master track: " + str(e))
+            raise
+
+    def _get_master_device_parameters(self, device_index):
+        """Read all parameters of a device on the master track"""
+        try:
+            master = self._song.master_track
+            if device_index < 0 or device_index >= len(master.devices):
+                raise IndexError("Master device index out of range")
+            device = master.devices[device_index]
+            parameters = []
+            for param in device.parameters:
+                p = {
+                    "name": param.name,
+                    "value": param.value,
+                    "min": param.min,
+                    "max": param.max,
+                    "is_quantized": param.is_quantized,
+                }
+                if param.is_quantized and hasattr(param, "value_items"):
+                    try:
+                        p["value_items"] = list(param.value_items)
+                    except Exception:
+                        p["value_items"] = None
+                else:
+                    p["value_items"] = None
+                parameters.append(p)
+            return {
+                "device_name": device.name,
+                "device_class": device.class_name,
+                "parameters": parameters,
+            }
+        except Exception as e:
+            self.log_message("Error getting master device parameters: " + str(e))
+            raise
+
+    def _set_master_device_parameter(self, device_index, parameter_name, value):
+        """Set a device parameter value on the master track"""
+        try:
+            master = self._song.master_track
+            if device_index < 0 or device_index >= len(master.devices):
+                raise IndexError("Master device index out of range")
+            device = master.devices[device_index]
+            for param in device.parameters:
+                if (
+                    param.name == parameter_name
+                    and hasattr(param, "value")
+                    and not getattr(param, "is_enabled", False) == False
+                ):
+                    if param.is_quantized:
+                        param.value = int(round(value))
+                    else:
+                        param.value = float(value)
+                    return {"name": param.name, "value": param.value}
+            raise ValueError(
+                "Parameter '{0}' not found or is read-only".format(parameter_name)
+            )
+        except Exception as e:
+            self.log_message("Error setting master device parameter: " + str(e))
+            raise
+
+    def _load_browser_item_on_master(self, item_uri):
+        """Load a browser item onto the master track by its URI"""
+        try:
+            master = self._song.master_track
+            app = self.application()
+            item = self._find_browser_item_by_uri(app.browser, item_uri)
+            if not item:
+                raise ValueError(
+                    "Browser item with URI '{0}' not found".format(item_uri)
+                )
+            self._song.view.selected_track = master
+            app.browser.load_item(item)
+            return {
+                "loaded": True,
+                "item_name": item.name,
+                "uri": item_uri,
+            }
+        except Exception as e:
+            self.log_message("Error loading browser item on master: {0}".format(str(e)))
+            self.log_message(traceback.format_exc())
             raise
 
     def _set_master_volume(self, value):
