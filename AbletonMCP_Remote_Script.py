@@ -2,9 +2,11 @@
 from __future__ import absolute_import, print_function, unicode_literals
 
 from _Framework.ControlSurface import ControlSurface
+import importlib
 import os
 import socket
 import json
+import sys
 import threading
 import time
 import traceback
@@ -227,6 +229,17 @@ class AbletonMCP(ControlSurface):
             elif command_type == "get_track_info":
                 track_index = params.get("track_index", 0)
                 response["result"] = self._get_track_info(track_index)
+            elif command_type == "reload":
+                self.log_message("Reloading Remote Script module...")
+                try:
+                    new_mod = importlib.reload(sys.modules[__name__])
+                    self.__class__ = new_mod.AbletonMCP
+                    self.log_message("Remote Script reloaded OK")
+                    response["result"] = {"reloaded": True}
+                except Exception as e:
+                    self.log_message("Reload failed: " + str(e))
+                    response["status"] = "error"
+                    response["message"] = "Reload failed: " + str(e)
             # Commands that modify Live's state should be scheduled on the main thread
             elif command_type in [
                 "create_midi_track",
@@ -295,6 +308,7 @@ class AbletonMCP(ControlSurface):
                 "get_clip_envelope",
                 "set_clip_envelope",
                 "set_arrangement_clip_envelope",
+                "set_automation_curve",
                 "set_track_volume",
                 "set_track_solo",
                 "set_track_mute",
@@ -540,8 +554,9 @@ class AbletonMCP(ControlSurface):
                             track_index = params.get("track_index", 0)
                             clip_index = params.get("clip_index", 0)
                             target = params.get("target", "volume")
+                            is_arrangement = params.get("is_arrangement", True)
                             result = self._get_clip_envelope(
-                                track_index, clip_index, target
+                                track_index, clip_index, target, is_arrangement
                             )
                         elif command_type == "set_clip_envelope":
                             track_index = params.get("track_index", 0)
@@ -558,6 +573,22 @@ class AbletonMCP(ControlSurface):
                             points = params.get("points", [])
                             result = self._set_arrangement_clip_envelope(
                                 track_index, clip_index, target, points
+                            )
+                        elif command_type == "set_automation_curve":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            target = params.get("target", "volume")
+                            points = params.get("points", [])
+                            is_arrangement = params.get("is_arrangement", False)
+                            result = self._set_automation_curve(
+                                track_index, clip_index, target, points, is_arrangement
+                            )
+                        elif command_type == "debug_clip_envelopes":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            is_arrangement = params.get("is_arrangement", True)
+                            result = self._debug_clip_envelopes(
+                                track_index, clip_index, is_arrangement
                             )
                         elif command_type == "set_track_solo":
                             track_index = params.get("track_index", 0)
@@ -2908,24 +2939,211 @@ class AbletonMCP(ControlSurface):
                 raise IndexError(f"Device index {dev_idx} out of range")
         raise ValueError(f"Unknown envelope target: {target}")
 
-    def _get_clip_envelope(self, track_index, clip_index, target, is_arrangement=True):
-        """Read envelope points from an arrangement clip's modulation envelope."""
+    def _debug_clip_envelopes(self, track_index, clip_index, is_arrangement=True):
+        """Exhaustive diagnostic of a clip: all properties + all envelope data."""
         try:
             if track_index < 0 or track_index >= len(self._song.tracks):
                 raise IndexError("Track index out of range")
             track = self._song.tracks[track_index]
+
+            if is_arrangement:
+                clips = list(track.arrangement_clips)
+                if clip_index < 0 or clip_index >= len(clips):
+                    raise IndexError("Arrangement clip index out of range")
+                clip = clips[clip_index]
+                clip_type = "arrangement"
+            else:
+                if clip_index < 0 or clip_index >= len(track.clip_slots):
+                    raise IndexError("Session clip slot index out of range")
+                slot = track.clip_slots[clip_index]
+                if not slot.has_clip:
+                    return {"clip_type": "session", "has_clip": False}
+                clip = slot.clip
+                clip_type = "session"
+
+            info = {
+                "clip_type": clip_type,
+                "name": clip.name,
+                "is_midi_clip": clip.is_midi_clip,
+                "is_audio_clip": clip.is_audio_clip,
+                "length": clip.length,
+                "start_time": getattr(clip, "start_time", None),
+                "color": clip.color,
+                "is_playing": clip.is_playing,
+                "has_envelopes": False,
+                "automation_envelopes": [],
+            }
+
+            # Check has_envelopes
+            try:
+                info["has_envelopes"] = clip.has_envelopes
+            except Exception as e:
+                info["has_envelopes_error"] = str(e)
+
+            # Try automation_envelopes (plural) – list all envelopes
+            try:
+                env_list = clip.automation_envelopes
+                self.log_message(f"DEBUG automation_envelopes type: {type(env_list)}")
+                for env in env_list:
+                    env_info = {"points": []}
+                    try:
+                        env_info["parameter_name"] = env.parameter.name
+                    except Exception:
+                        env_info["parameter_name"] = "?"
+                    try:
+                        for p in env.points:
+                            env_info["points"].append(
+                                {
+                                    "time": float(p[0]),
+                                    "value": float(p[1]),
+                                }
+                            )
+                    except Exception as pt_err:
+                        env_info["points_error"] = str(pt_err)
+                    info["automation_envelopes"].append(env_info)
+            except Exception as e:
+                info["automation_envelopes_error"] = str(e)
+
+            # Also try known targets directly
+            known_targets = ["volume", "panning"]
+            for dev_idx, dev in enumerate(track.devices):
+                for p in dev.parameters:
+                    tgt = f"device_{dev_idx}_{p.name}"
+                    known_targets.append(tgt)
+
+            envelope_by_target = {}
+            for target_name in known_targets:
+                try:
+                    param = self._resolve_envelope_target(track, target_name)
+                    env = clip.automation_envelope(param)
+                    if env is not None:
+                        pts = []
+                        for p in env.points:
+                            pts.append({"time": float(p[0]), "value": float(p[1])})
+                        if pts:
+                            envelope_by_target[target_name] = {
+                                "param_name": param.name,
+                                "points": pts,
+                            }
+                except Exception as e:
+                    envelope_by_target[target_name] = {"error": str(e)}
+
+            info["envelope_by_target"] = envelope_by_target
+
+            return info
+        except Exception as e:
+            self.log_message("Error in debug_clip_envelopes: " + str(e))
+            raise
+
+    def _get_clip_envelope(self, track_index, clip_index, target, is_arrangement=True):
+        """Read envelope points from a clip's modulation envelope.
+
+        Returns all clip envelope info for diagnostics.
+        """
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+
+            if is_arrangement:
+                clips = list(track.arrangement_clips)
+                if clip_index < 0 or clip_index >= len(clips):
+                    raise IndexError("Arrangement clip index out of range")
+                clip = clips[clip_index]
+            else:
+                if clip_index < 0 or clip_index >= len(track.clip_slots):
+                    raise IndexError("Session clip slot index out of range")
+                slot = track.clip_slots[clip_index]
+                if not slot.has_clip:
+                    return {"has_clip": False}
+                clip = slot.clip
+
             param = self._resolve_envelope_target(track, target)
-            clips = list(track.arrangement_clips)
-            if clip_index < 0 or clip_index >= len(clips):
-                raise IndexError("Arrangement clip index out of range")
-            clip = clips[clip_index]
-            env = clip.automation_envelope(param)
-            if env is None:
-                return {"points": []}
-            points = []
-            for p in env.points:
-                points.append({"time": float(p[0]), "value": float(p[1])})
-            return {"points": points}
+
+            # ── Clip properties ────────────────────────────────────────────
+            info = {
+                "target": target,
+                "clip_type": "arrangement" if is_arrangement else "session",
+                "name": clip.name,
+                "is_midi": clip.is_midi_clip,
+                "is_audio": clip.is_audio_clip,
+                "length": clip.length,
+            }
+
+            # ── has_envelopes ──────────────────────────────────────────────
+            try:
+                info["has_envelopes"] = clip.has_envelopes
+            except Exception:
+                try:
+                    info["has_envelopes"] = clip.has_envelopes()
+                except Exception as e2:
+                    info["has_envelopes"] = str(e2)
+
+            # ── automation_envelopes (plural): list all ────────────────────
+            env_list = []
+            try:
+                raw = clip.automation_envelopes
+                if raw is not None:
+                    for env in raw:
+                        entry = {"points": []}
+                        try:
+                            entry["parameter_name"] = env.parameter.name
+                        except Exception:
+                            entry["parameter_name"] = "?"
+                        try:
+                            for p in env.points:
+                                entry["points"].append(
+                                    {
+                                        "time": float(p[0]),
+                                        "value": float(p[1]),
+                                    }
+                                )
+                        except Exception as pt_err:
+                            entry["points_error"] = str(pt_err)
+                        env_list.append(entry)
+                info["automation_envelopes"] = env_list
+            except Exception:
+                try:
+                    raw = clip.automation_envelopes()
+                    if raw is not None:
+                        for env in raw:
+                            entry = {"points": []}
+                            try:
+                                entry["parameter_name"] = env.parameter.name
+                            except Exception:
+                                entry["parameter_name"] = "?"
+                            try:
+                                for p in env.points:
+                                    entry["points"].append(
+                                        {
+                                            "time": float(p[0]),
+                                            "value": float(p[1]),
+                                        }
+                                    )
+                            except Exception as pt_err:
+                                entry["points_error"] = str(pt_err)
+                            env_list.append(entry)
+                    info["automation_envelopes"] = env_list
+                except Exception as e2:
+                    info["automation_envelopes_error"] = str(e2)
+
+            # ── automation_envelope(singular) for target param ────────────
+            try:
+                env = clip.automation_envelope(param)
+                if env is not None:
+                    pts = []
+                    clip_start = getattr(clip, "start_time", 0.0)
+                    clip_end = getattr(clip, "end_time", clip_start + 4.0)
+                    for ev in env.events_in_range(clip_start, clip_end):
+                        pts.append({"time": ev.time, "value": ev.value})
+                    info["target_envelope_points"] = pts
+                else:
+                    info["target_envelope_points"] = []
+                    info["target_envelope_note"] = "automation_envelope returned None"
+            except Exception as e:
+                info["target_envelope_error"] = str(e)
+
+            return info
         except Exception as e:
             self.log_message("Error getting clip envelope: " + str(e))
             raise
@@ -2957,6 +3175,77 @@ class AbletonMCP(ControlSurface):
             return {"point_count": len(points)}
         except Exception as e:
             self.log_message("Error setting clip envelope: " + str(e))
+            raise
+
+    def _set_automation_curve(
+        self, track_index, clip_index, target, points, is_arrangement=True
+    ):
+        """Set automation curve from a list of points using connected steps.
+
+        Each point: {'time': float (beats), 'value': float (raw 0-127)}.
+        Uses insert_step() with connected durations to create proper step automation.
+        """
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            param = self._resolve_envelope_target(track, target)
+
+            if is_arrangement:
+                clips = list(track.arrangement_clips)
+                if clip_index < 0 or clip_index >= len(clips):
+                    raise IndexError("Arrangement clip index out of range")
+                clip = clips[clip_index]
+            else:
+                if clip_index < 0 or clip_index >= len(track.clip_slots):
+                    raise IndexError("Session clip slot index out of range")
+                slot = track.clip_slots[clip_index]
+                if not slot.has_clip:
+                    raise ValueError("No clip in slot")
+                clip = slot.clip
+
+            env = None
+            try:
+                env = clip.automation_envelope(param)
+            except Exception:
+                pass
+            if env is None:
+                env = clip.create_automation_envelope(param)
+
+            clip_start = getattr(clip, "start_time", 0.0)
+            clip_end = getattr(clip, "end_time", clip_start + 4.0)
+
+            # Clear existing envelope
+            env.delete_events_in_range(clip_start, clip_end)
+
+            if not points:
+                return {
+                    "action": "set_automation_curve",
+                    "parameter": param.name,
+                    "points_count": 0,
+                    "done": True,
+                }
+
+            sorted_points = sorted(points, key=lambda p: p["time"])
+            for i in range(len(sorted_points)):
+                t = sorted_points[i]["time"]
+                v = sorted_points[i]["value"]
+                if i < len(sorted_points) - 1:
+                    dur = sorted_points[i + 1]["time"] - t
+                    if dur <= 0:
+                        dur = 0.001
+                else:
+                    dur = max(clip_end - t, 0.1)
+                env.insert_step(t, dur, v)
+
+            return {
+                "action": "set_automation_curve",
+                "parameter": param.name,
+                "points_count": len(sorted_points),
+                "done": True,
+            }
+        except Exception as e:
+            self.log_message("Error setting automation curve: " + str(e))
             raise
 
     def _set_arrangement_clip_envelope(self, track_index, clip_index, target, points):

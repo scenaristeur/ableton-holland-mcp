@@ -327,6 +327,13 @@ def analyze_full(y_path: str) -> dict:
 
 
 @app.tool()
+def reload_script() -> dict[str, Any]:
+    """Reload the Remote Script module without restarting Ableton.
+    Copy the updated file first, then call this to apply changes."""
+    return _cmd("reload")
+
+
+@app.tool()
 def get_session_info() -> dict[str, Any]:
     """Get current session info: tempo, time signature, track count, playback state."""
     return _cmd("get_session_info")
@@ -632,25 +639,53 @@ def redo() -> dict[str, Any]:
 
 
 @app.tool()
-def set_arrangement_clip_envelope(
+def get_arrangement_clip_envelope(
+    track_index: int,
+    clip_index: int,
+    target: str = "volume",
+    is_arrangement: bool = True,
+) -> dict[str, Any]:
+    """Read clip envelope diagnostic info.
+    target: 'volume', 'panning', 'send_N', or 'device_N_PARAMNAME'
+    (e.g. 'device_0_Volume' for the Volume parameter of device index 0).
+    clip_index is the 0-based index from get_arrangement_clips.
+    is_arrangement=True reads arrangement clips, False reads session clip slots.
+    Returns exhaustive clip + envelope info."""
+    return _cmd(
+        "get_clip_envelope",
+        track_index=track_index,
+        clip_index=clip_index,
+        target=target,
+        is_arrangement=is_arrangement,
+    )
+
+
+@app.tool()
+def set_automation_curve(
     track_index: int,
     clip_index: int,
     target: str = "volume",
     points: list[dict[str, Any]] = [],
+    is_arrangement: bool = False,
 ) -> dict[str, Any]:
-    """Set modulation envelope on an arrangement clip.
-    Each point: {'time': float, 'value': float, 'duration': float} (time & duration in beats).
+    """Set automation curve on a clip from a list of points.
+
+    Each point: {'time': float (beats), 'value': float (raw 0-127)}.
+    Uses connected insert_step() calls to create proper step automation.
+
     target: 'volume', 'panning', 'send_N', or 'device_N_PARAMNAME'
-    (e.g. 'device_1_Dry/Wet' for the Dry/Wet parameter of device index 1).
-    clip_index is the index of the clip in the arrangement (0-based, from get_arrangement_clips).
-    points is a list of dicts, e.g. [{"time":0, "value":1}]."""
+    (e.g. 'device_1_Volume' for the Volume parameter of device index 1).
+
+    track_index is 0-based, clip_index is 0-based.
+    is_arrangement=True for arrangement clips, False for session clips."""
     parsed = points or []
     return _cmd(
-        "set_arrangement_clip_envelope",
+        "set_automation_curve",
         track_index=track_index,
         clip_index=clip_index,
         target=target,
         points=parsed,
+        is_arrangement=is_arrangement,
     )
 
 
@@ -720,6 +755,26 @@ def set_arrangement_clip_markers(
         clip_index=clip_index,
         start_marker=start_marker,
         end_marker=end_marker,
+    )
+
+
+# ── Clip Envelope Debug ─────────────────────────────────────────────────────────
+
+
+@app.tool()
+def debug_clip_envelopes(
+    track_index: int,
+    clip_index: int,
+    is_arrangement: bool = True,
+) -> dict[str, Any]:
+    """Exhaustive diagnostic of clip envelopes.
+    is_arrangement=True reads arrangement clips, False reads session clip slots.
+    Returns all clip properties + all automation envelopes found."""
+    return _cmd(
+        "debug_clip_envelopes",
+        track_index=track_index,
+        clip_index=clip_index,
+        is_arrangement=is_arrangement,
     )
 
 

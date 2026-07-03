@@ -9,14 +9,29 @@ Python-based MCP (Model Context Protocol) server for controlling Ableton Live an
 
 Supporting files: `capture_audio.py` (standalone CLI capture), `dashboard/app.py` (Tkinter GUI), `AbletonMCP_Remote_Script.py` (Live MIDI Remote Script in Python 2/3 hybrid).
 
-## Setup & Commands
+**Single RS file:** `AbletonMCP_Remote_Script.py` is the source of truth. Deployed to `AbletonMCP/__init__.py` (and `AbletonMCPExtended/__init__.py`).
+
+## Development Workflow
 
 | Command | Description |
 |---|---|
+| `python deploy_rs.py` | Copy RS + reload (no restart) |
+| `cp ...` then `reload` cmd | Manual deploy + hot-reload |
+
+### Deploy without restart
+1. Edit `AbletonMCP_Remote_Script.py`
+2. Run `python deploy_rs.py` (copies to both RS dirs, clears cache, sends `reload` command)
+3. Changes apply immediately — no Ableton restart needed
+
+## Setup & Commands
+
+| Command | Description |
+|---|---|---|
 | `.venv/Scripts/python -m pip install -r requirements.txt` | Install dependencies |
 | `.venv/Scripts/python ableton_full_mcp_server.py` | Start Ableton MCP server |
 | `.venv/Scripts/python surge_osc_mcp.py` | Start Surge XT OSC server |
 | `.venv/Scripts/python capture_audio.py --help` | Standalone audio capture CLI |
+| `python deploy_rs.py` | Deploy RS + hot-reload without restart |
 
 **Linting:** Ruff has been run manually before (`.ruff_cache/` exists) but no config file. Run with:
 ```
@@ -136,6 +151,10 @@ def my_tool(param1: str, param2: int = 0) -> dict:
 - Analysis functions load audio from WAV → CSV (`.npy` not used), run through librosa
 - The Remote Script (`AbletonMCP_Remote_Script.py`) is Python 2/3 compatible with `try: import Queue` compat shims
 - Surge OSC uses `python-osc` with `ThreadingOSCUDPServer` listening on ports 53281+ (stride=2)
+- Clip automation uses `insert_step(time, duration, value)` — the only write method in Live 12 Python API. `create_event()` requires a C++ struct (inaccessible). `control_coefficients` is read-only.
+- Connected steps pattern: `insert_step(t_i, t_{i+1}-t_i, v_i)` creates step automation (value holds from t_i to t_{i+1}). Each step creates 2 events at boundaries (end of previous + start of next).
+- Parameter targets: `"volume"`, `"panning"`, `"send_N"`, `"device_N_PARAMNAME"` (e.g. `device_1_Volume`)
+- "reload" command hot-reloads the RS via `importlib.reload()` + `self.__class__ = new_mod.AbletonMCP`
 
 ### What NOT To Do
 
@@ -146,3 +165,6 @@ def my_tool(param1: str, param2: int = 0) -> dict:
 - Do NOT run multiple `load_instrument_or_effect` calls in parallel
 - Do NOT modify `AbletonMCP_Remote_Script.py` without understanding Python 2/3 dual compatibility
 - Do NOT guess file paths or module names — verify with the actual imports in the codebase
+- Do NOT use `create_event()` — it doesn't work in Live 12 (needs C++ struct `TEnvelopeEvent`)
+- Do NOT try to set `control_coefficients` — it's read-only
+- Do NOT run `deploy_rs.py` if Ableton isn't running (reload will timeout — still safe, just restart)

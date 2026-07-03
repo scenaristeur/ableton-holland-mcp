@@ -157,6 +157,68 @@ capture_and_analyze(position_beats=30, duration_sec=20, output_name="part2")
 # Calculate overlap: position_beats = duration_sec × (bpm / 60) - overlap_desired_beats
 ```
 
+## Automation Envelope Workflow
+
+### Set automation curve on a clip
+```python
+set_automation_curve(
+    track_index=0,
+    clip_index=0,
+    target="device_1_Volume",  # or "volume", "panning", "send_0", "device_0_Device On"
+    points=[
+        {"time": 0.0, "value": 0},
+        {"time": 2.0, "value": 64},
+        {"time": 4.0, "value": 127},
+    ],
+    is_arrangement=False  # False = session clip, True = arrangement clip
+)
+```
+
+### Parameter target format
+| Target | Description | Value range |
+|---|---|---|
+| `"volume"` | Track mixer volume | 0.0–1.0 |
+| `"panning"` | Track mixer panning | 0.0–1.0 |
+| `"send_N"` | Send N (e.g. `send_0`) | 0.0–1.0 |
+| `"device_N_PARAMNAME"` | Device parameter | 0–127 (raw) |
+
+Example: `device_1_Volume` = device index 1, parameter "Volume" (Grand Piano rack in test project).
+
+### How it works
+Each value holds from its time until the next point's time (connected steps). No interpolation between values — this is Live 12's `insert_step()` API, same as Ableton Push.
+
+For a ramp effect, add intermediate points:
+```python
+points = [
+    {"time": 0.0, "value": 0},
+    {"time": 1.0, "value": 42},
+    {"time": 2.0, "value": 85},
+    {"time": 3.0, "value": 127},
+]
+```
+
+### Read existing automation
+```python
+get_clip_envelope(
+    track_index=0,
+    clip_index=0,
+    target="device_1_Volume",
+    is_arrangement=False
+)
+```
+Returns `target_envelope_points` with `[{time, value}, ...]`.
+
+### Hot-reload after RS changes
+```python
+reload_script()
+```
+No Ableton restart needed after updating the Remote Script.
+
+### Value scale
+- Device parameters (most): 0–127 raw
+- Mixer volume/pan/sends: 0.0–1.0 normalized
+- Quantized params: integer index
+
 ## Limitations & Troubleshooting
 
 ### Known limitations
@@ -170,7 +232,8 @@ capture_and_analyze(position_beats=30, duration_sec=20, output_name="part2")
 - Arrangement API requires Remote Script v1314+, Master API requires v1414+.
 - Device parameters with `is_enabled=False` are read-only (skipped)
 - Quantized params (dropdown menus) take an integer index
-- API cannot read/write automation curves — only static values
+- API writes automation curves via `insert_step()` with connected durations (step automation only, no interpolation)
+- Read automation: `get_clip_envelope` returns `target_envelope_points`
 
 ### Timeout (-32001) troubleshooting
 **Reference:** https://mcpcat.io/guides/fixing-mcp-error-32001-request-timeout
