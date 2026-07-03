@@ -229,6 +229,10 @@ class AbletonMCP(ControlSurface):
             elif command_type == "get_track_info":
                 track_index = params.get("track_index", 0)
                 response["result"] = self._get_track_info(track_index)
+            elif command_type == "get_track_automation":
+                track_index = params.get("track_index", 0)
+                target = params.get("target", "volume")
+                response["result"] = self._get_track_automation(track_index, target)
             elif command_type == "reload":
                 self.log_message("Reloading Remote Script module...")
                 try:
@@ -3177,6 +3181,52 @@ class AbletonMCP(ControlSurface):
             self.log_message("Error setting clip envelope: " + str(e))
             raise
 
+    def _get_track_automation(self, track_index, target):
+        """Read track-level automation envelope (arrangement automation lanes)."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            param = self._resolve_envelope_target(track, target)
+
+            song_start = getattr(self._song, "start_time", 0.0)
+            song_end = getattr(self._song, "song_length", 232.0)
+
+            info = {
+                "track_name": track.name,
+                "target": target,
+                "parameter": param.name,
+            }
+
+            env = None
+            try:
+                env = track.automation_envelope(param)
+            except Exception:
+                pass
+
+            if env is not None:
+                info["has_automation"] = True
+                pts = []
+                try:
+                    for ev in env.events_in_range(song_start, song_end):
+                        pts.append({"time": ev.time, "value": ev.value})
+                except Exception:
+                    try:
+                        for p in env.points:
+                            pts.append({"time": float(p[0]), "value": float(p[1])})
+                    except Exception:
+                        pass
+                info["events"] = pts
+                info["event_count"] = len(pts)
+            else:
+                info["has_automation"] = False
+                info["note"] = "track.automation_envelope returned None"
+
+            return info
+        except Exception as e:
+            self.log_message("Error getting track automation: " + str(e))
+            raise
+
     def _set_automation_curve(
         self, track_index, clip_index, target, points, is_arrangement=True
     ):
@@ -3204,49 +3254,73 @@ class AbletonMCP(ControlSurface):
                     raise ValueError("No clip in slot")
                 clip = slot.clip
 
-            env = None
-            try:
-                env = clip.automation_envelope(param)
-            except Exception:
-                pass
-            if env is None:
-                env = clip.create_automation_envelope(param)
+            is_audio = hasattr(clip, "is_audio_clip") and clip.is_audio_clip
+            is_midi = hasattr(clip, "is_midi_clip") and clip.is_midi_clip
 
-            clip_start = getattr(clip, "start_time", 0.0)
-            clip_end = getattr(clip, "end_time", clip_start + 4.0)
+            if is_arrangement and is_midi:
+                # MIDI arrangement clips: use temp session clip workaround
+                clip_start = getattr(clip, "start_time", 0.0)
+                clip_end = getattr(clip, "end_time", clip_start + 4.0)
+                orig_length = clip.length if hasattr(clip, "length") else 4.0
+                live_notes = tuple(clip.get_notes(0.0, 0, orig_length, 127))
 
-            # Clear existing envelope
-            env.delete_events_in_range(clip_start, clip_end)
+                temp_slot = None
+                for i in range(len(track.clip_slots)):
+                    if not track.clip_slots[i].has_clip:
+                        temp_slot = track.clip_slots[i]
+                        break
+                if temp_slot is None:
+                    raise Exception("No empty session clip slot available")
 
-            if not points:
-                return {
-                    "action": "set_automation_curve",
-                    "parameter": param.name,
-                    "points_count": 0,
-                    "done": True,
-                }
+                temp_slot.create_clip(orig_length)
+                if live_notes:
+                    temp_slot.clip.set_notes(live_notes)
 
-            sorted_points = sorted(points, key=lambda p: p["time"])
-            for i in range(len(sorted_points)):
-                t = sorted_points[i]["time"]
-                v = sorted_points[i]["value"]
-                if i < len(sorted_points) - 1:
-                    dur = sorted_points[i + 1]["time"] - t
-                    if dur <= 0:
-                        dur = 0.001
-                else:
-                    dur = max(clip_end - t, 0.1)
-                env.insert_step(t, dur, v)
+                env = temp_slot.clip.create_automation_envelope(param)
+                self._apply_curve(env, points, 0.0, orig_length)
+                track.delete_clip(clip)
+                track.duplicate_clip_to_arrangement(temp_slot.clip, float(clip_start))
+                temp_slot.delete_clip()
+            else:
+                # Session clips or audio arrangement clips: direct approach
+                env = None
+                try:
+                    env = clip.automation_envelope(param)
+                except Exception:
+                    pass
+                if env is None:
+                    env = clip.create_automation_envelope(param)
+
+                clip_start = getattr(clip, "start_time", 0.0)
+                clip_end = getattr(clip, "end_time", clip_start + 4.0)
+                env.delete_events_in_range(clip_start, clip_end)
+                self._apply_curve(env, points, 0.0, clip_end)
 
             return {
                 "action": "set_automation_curve",
                 "parameter": param.name,
-                "points_count": len(sorted_points),
+                "points_count": len(points),
                 "done": True,
             }
         except Exception as e:
             self.log_message("Error setting automation curve: " + str(e))
             raise
+
+    def _apply_curve(self, env, points, clip_start, clip_end):
+        """Apply a list of automated points to an envelope using connected steps."""
+        if not points:
+            return
+        sorted_points = sorted(points, key=lambda p: p["time"])
+        for i in range(len(sorted_points)):
+            t = sorted_points[i]["time"]
+            v = sorted_points[i]["value"]
+            if i < len(sorted_points) - 1:
+                dur = sorted_points[i + 1]["time"] - t
+                if dur <= 0:
+                    dur = 0.001
+            else:
+                dur = max(clip_end - t, 0.1)
+            env.insert_step(t, dur, v)
 
     def _set_arrangement_clip_envelope(self, track_index, clip_index, target, points):
         """Set modulation envelope on an arrangement clip.

@@ -184,8 +184,31 @@ set_automation_curve(
 
 Example: `device_1_Volume` = device index 1, parameter "Volume" (Grand Piano rack in test project).
 
+### Live 12 Lite automation API findings
+
+#### Ce qui marche ✅
+- **Session clips** : `set_automation_curve` écrit + lit les enveloppes via `events_in_range()`
+- **Duplicate to arrangement** : `duplicate_clip_to_arrangement` copie les enveloppes des clips session vers l'arrangement (visible dans l'UI)
+- **Lecture** : `events_in_range()` fonctionne sur les clips session
+
+#### Ce qui ne marche PAS ❌
+- `automation_envelope(param)` sur clip MIDI arrangement → retourne `None` (API buggée, mais l'enveloppe existe)
+- `create_automation_envelope(param)` sur clip MIDI arrangement → exception "Not a session clip"
+- `track.automation_envelope(param)` → pas disponible dans Live 12 Lite
+- `track.freeze` → pas disponible dans Live 12 Lite
+- **Lecture API** des enveloppes d'arrangement → impossible (même si l'UI les montre)
+
+#### Workflow recommandé
+1. Créer les clips en session view avec leurs automations
+2. `duplicate_to_arrangement` pour les copier dans l'arrangement
+3. Les enveloppes sont transférées et visibles dans les lanes d'automation de piste
+4. Les automations jouent correctement pendant le playback de l'arrangement
+5. **Les valeurs sont illisibles et non modifiables depuis Python** (limitation Live 12 Lite)
+
 ### How it works
 Each value holds from its time until the next point's time (connected steps). No interpolation between values — this is Live 12's `insert_step()` API, same as Ableton Push.
+
+For a ramp effect, add intermediate points:
 
 For a ramp effect, add intermediate points:
 ```python

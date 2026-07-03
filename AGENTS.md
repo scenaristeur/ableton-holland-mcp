@@ -155,6 +155,12 @@ def my_tool(param1: str, param2: int = 0) -> dict:
 - Connected steps pattern: `insert_step(t_i, t_{i+1}-t_i, v_i)` creates step automation (value holds from t_i to t_{i+1}). Each step creates 2 events at boundaries (end of previous + start of next).
 - Parameter targets: `"volume"`, `"panning"`, `"send_N"`, `"device_N_PARAMNAME"` (e.g. `device_1_Volume`)
 - "reload" command hot-reloads the RS via `importlib.reload()` + `self.__class__ = new_mod.AbletonMCP`
+- **IMPORTANT — Automation arrangement findings:**
+  - `set_automation_curve(is_arrangement=False)` → écrit ET lit sur clips session (via `events_in_range`)
+  - `duplicate_clip_to_arrangement` → copie les enveloppes dans l'arrangement (UI visible, MAIS API illisible)
+  - `automation_envelope(param)` sur clip MIDI arrangement → retourne `None` (API bug, enveloppe existe)
+  - `create_automation_envelope(param)` sur clip MIDI arrangement → exception (Live 12 Lite limitation)
+  - Les enveloppes d'arrangement sont **write-once** : écriture OK via workflow session→duplicate, mais lecture/modification impossible depuis Python
 
 ### What NOT To Do
 
@@ -168,3 +174,5 @@ def my_tool(param1: str, param2: int = 0) -> dict:
 - Do NOT use `create_event()` — it doesn't work in Live 12 (needs C++ struct `TEnvelopeEvent`)
 - Do NOT try to set `control_coefficients` — it's read-only
 - Do NOT run `deploy_rs.py` if Ableton isn't running (reload will timeout — still safe, just restart)
+- Do NOT use `create_event()` — it doesn't work in Live 12 (needs C++ struct `TEnvelopeEvent`)
+- Do NOT try to set `control_coefficients` — it's read-only
