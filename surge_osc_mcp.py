@@ -197,6 +197,8 @@ def surge_load_patch(path: str, instance: int = 0) -> dict:
     """
     win_path = path.replace("/", "\\")
     osc_send(instance, "/patch/load", win_path)
+    # Clear any stale responses from the load command before querying
+    osc_collect(instance, 0.3)
     return _get_patch(instance)
 
 

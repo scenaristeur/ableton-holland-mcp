@@ -265,8 +265,10 @@ class AbletonMCP(ControlSurface):
                 "set_current_song_time",
                 "duplicate_session_clip_to_arrangement",
                 "set_arrangement_clip_notes",
+                "set_arrangement_clip_name",
                 # Device parameters
                 "set_device_parameter",
+                "delete_device",
                 # Clip operations
                 "delete_session_clip",
                 "delete_arrangement_clip",
@@ -320,6 +322,32 @@ class AbletonMCP(ControlSurface):
                 "set_arrangement_clip_pitch",
                 "set_arrangement_clip_warp",
                 "set_arrangement_clip_markers",
+                "set_arrangement_clip_name",
+                # Extended device management
+                "enable_device",
+                "disable_device",
+                "navigate_device_preset",
+                # Track mixer
+                "set_track_panning",
+                # View control
+                "set_ableton_view",
+                "control_arrangement_view",
+                # Cue points
+                "create_cue_point",
+                "delete_cue_point",
+                "jump_to_cue_point",
+                # Arrangement
+                "set_arrangement_loop",
+                "create_arrangement_midi_clip",
+                "create_arrangement_audio_clip",
+                "duplicate_clip_to_arrangement",
+                # Automation management
+                "manage_clip_automation",
+                "add_clip_envelope_point",
+                "clear_clip_envelope",
+                "experiment_envelope",
+                "envelope_dump",
+                "test_create_event",
             ]:
                 # Use a thread-safe approach with a response queue
                 response_queue = queue.Queue()
@@ -414,6 +442,10 @@ class AbletonMCP(ControlSurface):
                             result = self._set_device_parameter(
                                 track_index, device_index, parameter_name, value
                             )
+                        elif command_type == "delete_device":
+                            track_index = params.get("track_index", 0)
+                            device_index = params.get("device_index", 0)
+                            result = self._delete_device(track_index, device_index)
                         # ── Clip operations ───────────────────────────────────────
                         elif command_type == "delete_session_clip":
                             track_index = params.get("track_index", 0)
@@ -633,6 +665,165 @@ class AbletonMCP(ControlSurface):
                             result = self._set_arrangement_clip_markers(
                                 track_index, clip_index, start_marker, end_marker
                             )
+                        elif command_type == "set_arrangement_clip_name":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            name = params.get("name", "")
+                            result = self._set_arrangement_clip_name(
+                                track_index, clip_index, name
+                            )
+                        # ── Extended device management ────────────────────────────
+                        elif command_type == "enable_device":
+                            track_index = params.get("track_index", 0)
+                            device_index = params.get("device_index", 0)
+                            device_name = params.get("device_name", "")
+                            chain_index = params.get("chain_index", 0)
+                            result = self._enable_device(
+                                track_index, device_index, device_name, chain_index
+                            )
+                        elif command_type == "disable_device":
+                            track_index = params.get("track_index", 0)
+                            device_index = params.get("device_index", 0)
+                            device_name = params.get("device_name", "")
+                            chain_index = params.get("chain_index", 0)
+                            result = self._disable_device(
+                                track_index, device_index, device_name, chain_index
+                            )
+                        elif command_type == "navigate_device_preset":
+                            track_index = params.get("track_index", 0)
+                            device_index = params.get("device_index", 1)
+                            chain_index = params.get("chain_index", 0)
+                            direction = params.get("direction", "next")
+                            result = self._navigate_device_preset(
+                                track_index, device_index, chain_index, direction
+                            )
+                        # ── Track mixer ──────────────────────────────────────────
+                        elif command_type == "set_track_panning":
+                            track_index = params.get("track_index", 0)
+                            panning = params.get("panning", 0.0)
+                            result = self._set_track_panning(track_index, panning)
+                        # ── View control ─────────────────────────────────────────
+                        elif command_type == "set_ableton_view":
+                            view = params.get("view", "Arranger")
+                            result = self._set_ableton_view(view)
+                        elif command_type == "control_arrangement_view":
+                            action = params.get("action", "")
+                            track_idx = params.get("track_index", 0)
+                            result = self._control_arrangement_view(action, track_idx)
+                        # ── Cue points ───────────────────────────────────────────
+                        elif command_type == "create_cue_point":
+                            bar = params.get("bar", 0)
+                            beat = params.get("beat", 0.0)
+                            name = params.get("name", "")
+                            result = self._create_cue_point(bar, beat, name)
+                        elif command_type == "delete_cue_point":
+                            bar = params.get("bar", 0)
+                            beat = params.get("beat", 0.0)
+                            result = self._delete_cue_point(bar, beat)
+                        elif command_type == "jump_to_cue_point":
+                            direction = params.get("direction", "")
+                            name = params.get("name", "")
+                            result = self._jump_to_cue_point(direction, name)
+                        # ── Arrangement ──────────────────────────────────────────
+                        elif command_type == "set_arrangement_loop":
+                            enabled = params.get("enabled", True)
+                            start_bar = params.get("start_bar", 0)
+                            end_bar = params.get("end_bar", 0)
+                            start_beat = params.get("start_beat", 0.0)
+                            length_beats = params.get("length_beats", 0.0)
+                            result = self._set_arrangement_loop(
+                                enabled, start_bar, end_bar, start_beat, length_beats
+                            )
+                        elif command_type == "create_arrangement_midi_clip":
+                            track_index = params.get("track_index", 0)
+                            start_bar = params.get("start_bar", 0)
+                            end_bar = params.get("end_bar", 0)
+                            start_beat = params.get("start_beat", 0.0)
+                            length_beats = params.get("length_beats", 4.0)
+                            name = params.get("name", "")
+                            result = self._create_arrangement_midi_clip(
+                                track_index,
+                                start_bar,
+                                end_bar,
+                                start_beat,
+                                length_beats,
+                                name,
+                            )
+                        elif command_type == "create_arrangement_audio_clip":
+                            track_index = params.get("track_index", 0)
+                            file_path = params.get("file_path", "")
+                            start_bar = params.get("start_bar", 0)
+                            start_beat = params.get("start_beat", 0.0)
+                            result = self._create_arrangement_audio_clip(
+                                track_index, file_path, start_bar, start_beat
+                            )
+                        elif command_type == "duplicate_clip_to_arrangement":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            dest_bar = params.get("destination_bar", 0)
+                            dest_beat = params.get("destination_beat", 0.0)
+                            result = self._duplicate_clip_to_arrangement(
+                                track_index, clip_index, dest_bar, dest_beat
+                            )
+                        # ── Automation management ───────────────────────────────
+                        elif command_type == "manage_clip_automation":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 1)
+                            clip_name = params.get("clip_name", "")
+                            action = params.get("action", "create")
+                            param_name = params.get("parameter_name", "volume")
+                            result = self._manage_clip_automation(
+                                track_index, clip_index, clip_name, action, param_name
+                            )
+                        elif command_type == "add_clip_envelope_point":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            target = params.get("target", "device_1_Volume")
+                            time = params.get("time", 0.0)
+                            value = params.get("value", 0.0)
+                            duration = params.get("duration", 0.0)
+                            is_arr = params.get("is_arrangement", False)
+                            result = self._add_clip_envelope_point(
+                                track_index,
+                                clip_index,
+                                target,
+                                time,
+                                value,
+                                duration,
+                                is_arr,
+                            )
+                        elif command_type == "clear_clip_envelope":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            target = params.get("target", "device_1_Volume")
+                            is_arr = params.get("is_arrangement", False)
+                            result = self._clear_clip_envelope(
+                                track_index, clip_index, target, is_arr
+                            )
+                        elif command_type == "experiment_envelope":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            target = params.get("target", "device_1_Volume")
+                            is_arr = params.get("is_arrangement", False)
+                            result = self._experiment_envelope(
+                                track_index, clip_index, target, is_arr
+                            )
+                        elif command_type == "envelope_dump":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            is_arr = params.get("is_arrangement", True)
+                            result = self._envelope_dump(
+                                track_index, clip_index, is_arr
+                            )
+                        elif command_type == "test_create_event":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            target = params.get("target", "device_1_Volume")
+                            time = params.get("time", 0.0)
+                            value = params.get("value", 0.0)
+                            result = self._test_create_event(
+                                track_index, clip_index, target, time, value
+                            )
 
                         # Put the result in the queue
                         response_queue.put({"status": "success", "result": result})
@@ -742,6 +933,25 @@ class AbletonMCP(ControlSurface):
             elif command_type == "get_master_device_parameters":
                 device_index = params.get("device_index", 0)
                 response["result"] = self._get_master_device_parameters(device_index)
+            # ── Extended read-only commands ──────────────────────────────────────
+            elif command_type == "get_chain_info":
+                track_index = params.get("track_index", 0)
+                device_index = params.get("device_index", 1)
+                chain_index = params.get("chain_index", 0)
+                response["result"] = self._get_chain_info(
+                    track_index, device_index, chain_index
+                )
+            elif command_type == "get_drum_pad_info":
+                track_index = params.get("track_index", 0)
+                device_index = params.get("device_index", 1)
+                response["result"] = self._get_drum_pad_info(track_index, device_index)
+            elif command_type == "get_cue_points":
+                response["result"] = self._get_cue_points()
+            elif command_type == "get_track_volume":
+                track_index = params.get("track_index", 0)
+                response["result"] = self._get_track_volume(track_index)
+            elif command_type == "get_track_deletion_status":
+                response["result"] = self._get_track_deletion_status()
             else:
                 response["status"] = "error"
                 response["message"] = "Unknown command: " + command_type
@@ -1315,6 +1525,25 @@ class AbletonMCP(ControlSurface):
             }
         except Exception as e:
             self.log_message("Error setting arrangement clip markers: " + str(e))
+            raise
+
+    def _set_arrangement_clip_name(self, track_index, clip_index, name):
+        """Rename an arrangement clip."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            clips = list(track.arrangement_clips)
+            if clip_index < 0 or clip_index >= len(clips):
+                raise IndexError("Arrangement clip index out of range")
+            clip = clips[clip_index]
+            clip.name = str(name)
+            return {
+                "track_index": track_index,
+                "name": clip.name,
+            }
+        except Exception as e:
+            self.log_message("Error setting arrangement clip name: " + str(e))
             raise
 
     def _duplicate_session_clip_to_arrangement(
@@ -1979,6 +2208,29 @@ class AbletonMCP(ControlSurface):
             )
         except Exception as e:
             self.log_message("Error setting device parameter: " + str(e))
+            raise
+
+    def _delete_device(self, track_index, device_index):
+        """Delete a device from a track"""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            if device_index < 0 or device_index >= len(track.devices):
+                raise IndexError("Device index out of range")
+            device = track.devices[device_index]
+            device_name = device.name
+            device_class = device.class_name
+            track.delete_device(device_index)
+            return {
+                "deleted": True,
+                "device_name": device_name,
+                "device_class": device_class,
+                "track_index": track_index,
+                "device_index": device_index,
+            }
+        except Exception as e:
+            self.log_message("Error deleting device: " + str(e))
             raise
 
     # ═══════════════════════════════════════════════════════════════
@@ -3389,4 +3641,704 @@ class AbletonMCP(ControlSurface):
                 }
         except Exception as e:
             self.log_message("Error setting arrangement clip envelope: " + str(e))
+            raise
+
+    # ═══════════════════════════════════════════════════════════════
+    # Extended Device Management
+    # ═══════════════════════════════════════════════════════════════
+
+    def _get_track_and_device(
+        self, track_index, device_index, device_name="", chain_index=0
+    ):
+        """Resolve a track and device, optionally in a chain."""
+        if track_index < 0 or track_index >= len(self._song.tracks):
+            raise IndexError("Track index out of range")
+        track = self._song.tracks[track_index]
+        if device_name:
+            for i, d in enumerate(track.devices):
+                if d.name == device_name:
+                    device_index = i
+                    break
+            else:
+                raise ValueError("Device not found: " + device_name)
+        if device_index < 0 or device_index >= len(track.devices):
+            raise IndexError("Device index out of range")
+        device = track.devices[device_index]
+        if chain_index > 0 and hasattr(device, "chains") and device.chains:
+            if chain_index - 1 < len(device.chains):
+                chain = device.chains[chain_index - 1]
+                return chain, chain.devices[0] if chain.devices else None
+        return track, device
+
+    def _enable_device(self, track_index, device_index, device_name="", chain_index=0):
+        """Enable a device on a track."""
+        try:
+            _, device = self._get_track_and_device(
+                track_index, device_index, device_name, chain_index
+            )
+            device.is_enabled = True
+            return {"enabled": True, "device_name": device.name}
+        except Exception as e:
+            self.log_message("Error enabling device: " + str(e))
+            raise
+
+    def _disable_device(self, track_index, device_index, device_name="", chain_index=0):
+        """Disable (bypass) a device on a track."""
+        try:
+            _, device = self._get_track_and_device(
+                track_index, device_index, device_name, chain_index
+            )
+            device.is_enabled = False
+            return {"enabled": False, "device_name": device.name}
+        except Exception as e:
+            self.log_message("Error disabling device: " + str(e))
+            raise
+
+    def _navigate_device_preset(
+        self, track_index, device_index, chain_index, direction
+    ):
+        """Navigate device presets."""
+        try:
+            _, device = self._get_track_and_device(
+                track_index, device_index, "", chain_index
+            )
+            if direction == "next":
+                device.presets.next()
+            elif direction == "previous":
+                device.presets.previous()
+            return {"direction": direction, "device_name": device.name}
+        except Exception as e:
+            self.log_message("Error navigating device preset: " + str(e))
+            raise
+
+    def _get_chain_info(self, track_index, device_index, chain_index):
+        """List chains in a rack device, or devices within a specific chain."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            if device_index < 0 or device_index >= len(track.devices):
+                raise IndexError("Device index out of range")
+            device = track.devices[device_index]
+            result = {"device_name": device.name, "device_class": device.class_name}
+            if hasattr(device, "chains") and device.chains:
+                if chain_index > 0:
+                    if chain_index - 1 < len(device.chains):
+                        chain = device.chains[chain_index - 1]
+                        devices = []
+                        for d in chain.devices:
+                            devices.append(
+                                {
+                                    "name": d.name,
+                                    "class_name": d.class_name,
+                                    "is_enabled": d.is_enabled,
+                                }
+                            )
+                        result["chain_devices"] = devices
+                    else:
+                        raise IndexError("Chain index out of range")
+                else:
+                    chains = []
+                    for i, c in enumerate(device.chains):
+                        chains.append(
+                            {
+                                "index": i + 1,
+                                "name": c.name if c.name else "Chain " + str(i + 1),
+                                "device_count": len(c.devices),
+                            }
+                        )
+                    result["chains"] = chains
+            else:
+                result["chains"] = []
+            return result
+        except Exception as e:
+            self.log_message("Error getting chain info: " + str(e))
+            raise
+
+    def _get_drum_pad_info(self, track_index, device_index):
+        """List filled drum pads in a Drum Rack."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            if device_index < 0 or device_index >= len(track.devices):
+                raise IndexError("Device index out of range")
+            device = track.devices[device_index]
+            pads = []
+            if hasattr(device, "drum_pads"):
+                for pad in device.drum_pads:
+                    if pad.chains and len(pad.chains) > 0:
+                        chain = pad.chains[0]
+                        pads.append(
+                            {
+                                "note": pad.note,
+                                "name": chain.name
+                                if chain.name
+                                else "Pad " + str(pad.note),
+                                "device_count": len(chain.devices),
+                            }
+                        )
+            return {"pads": pads}
+        except Exception as e:
+            self.log_message("Error getting drum pad info: " + str(e))
+            raise
+
+    # ═══════════════════════════════════════════════════════════════
+    # Track Mixer Extras
+    # ═══════════════════════════════════════════════════════════════
+
+    def _set_track_panning(self, track_index, panning):
+        """Set a track's panning (-1.0 to 1.0)."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            track.mixer_device.panning.value = float(panning)
+            return {"track_index": track_index, "panning": float(panning)}
+        except Exception as e:
+            self.log_message("Error setting track panning: " + str(e))
+            raise
+
+    def _get_track_volume(self, track_index):
+        """Get a track's volume and panning info."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            vol = track.mixer_device.volume
+            pan = track.mixer_device.panning
+            return {
+                "volume": vol.value,
+                "volume_min": vol.min,
+                "volume_max": vol.max,
+                "panning": pan.value,
+            }
+        except Exception as e:
+            self.log_message("Error getting track volume: " + str(e))
+            raise
+
+    # ═══════════════════════════════════════════════════════════════
+    # View Control
+    # ═══════════════════════════════════════════════════════════════
+
+    def _set_ableton_view(self, view):
+        """Switch Ableton's main view."""
+        try:
+            if view == "Arranger":
+                self._song.view.show_view("Arranger")
+            elif view == "Session":
+                self._song.view.show_view("Session")
+            elif view == "Detail":
+                self._song.view.show_view("Detail")
+            elif view == "Detail/Clip":
+                self._song.view.show_view("Detail/Clip")
+            elif view == "Detail/DeviceChain":
+                self._song.view.show_view("Detail/DeviceChain")
+            elif view == "Browser":
+                self._song.view.show_view("Browser")
+            return {"view": view}
+        except Exception as e:
+            self.log_message("Error setting view: " + str(e))
+            raise
+
+    def _control_arrangement_view(self, action, track_index):
+        """Control the arrangement view."""
+        try:
+            if action == "zoom_in":
+                self._song.view.zoom_in()
+            elif action == "zoom_out":
+                self._song.view.zoom_out()
+            elif action == "scroll_left":
+                self._song.view.scroll_left()
+            elif action == "scroll_right":
+                self._song.view.scroll_right()
+            elif action == "follow_on":
+                self._song.view.follow_song = True
+            elif action == "follow_off":
+                self._song.view.follow_song = False
+            elif action == "collapse_track":
+                if track_index >= 0 and track_index < len(self._song.tracks):
+                    self._song.tracks[track_index].view.is_collapsed = True
+            elif action == "expand_track":
+                if track_index >= 0 and track_index < len(self._song.tracks):
+                    self._song.tracks[track_index].view.is_collapsed = False
+            return {"action": action}
+        except Exception as e:
+            self.log_message("Error controlling arrangement view: " + str(e))
+            raise
+
+    # ═══════════════════════════════════════════════════════════════
+    # Cue Points
+    # ═══════════════════════════════════════════════════════════════
+
+    def _get_cue_points(self):
+        """List all cue points with bar positions."""
+        try:
+            cues = []
+            for c in self._song.cue_points:
+                cues.append(
+                    {
+                        "name": c.name,
+                        "time": c.time,
+                        "bar": c.time
+                        / self._song.signature_numerator
+                        * 4.0
+                        / (self._song.signature_denominator / 4.0)
+                        if self._song.signature_denominator
+                        else 0,
+                    }
+                )
+            return {"cue_points": cues}
+        except Exception as e:
+            self.log_message("Error getting cue points: " + str(e))
+            raise
+
+    def _create_cue_point(self, bar, beat, name):
+        """Create a cue point at position."""
+        try:
+            from math import floor
+
+            beat_time = (
+                (bar - 1)
+                * float(self._song.signature_numerator)
+                * (4.0 / float(self._song.signature_denominator))
+                + beat
+                if bar > 0
+                else beat
+            )
+            self._song.create_cue(beat_time)
+            cue = self._song.cue_points[-1]
+            if name:
+                cue.name = str(name)
+            return {"name": cue.name, "time": beat_time}
+        except Exception as e:
+            self.log_message("Error creating cue point: " + str(e))
+            raise
+
+    def _delete_cue_point(self, bar, beat):
+        """Delete a cue point at a position."""
+        try:
+            cue_to_delete = None
+            for c in self._song.cue_points:
+                c_bar = (
+                    c.time
+                    / self._song.signature_numerator
+                    * 4.0
+                    / (self._song.signature_denominator / 4.0)
+                    if self._song.signature_denominator
+                    else 0
+                )
+                if bar > 0 and int(c_bar) == bar:
+                    cue_to_delete = c
+                    break
+                elif abs(c.time - beat) < 0.01:
+                    cue_to_delete = c
+                    break
+            if cue_to_delete:
+                self._song.delete_cue(cue_to_delete)
+                return {"deleted": True}
+            return {"deleted": False}
+        except Exception as e:
+            self.log_message("Error deleting cue point: " + str(e))
+            raise
+
+    def _jump_to_cue_point(self, direction, name):
+        """Jump to next/prev cue point or by name."""
+        try:
+            if name:
+                for c in self._song.cue_points:
+                    if c.name == name:
+                        self._song.current_song_time = c.time
+                        return {"jumped_to": name, "time": c.time}
+                raise ValueError("Cue point not found: " + name)
+            if direction == "next":
+                self._song.jump_to_next_cue()
+            elif direction == "prev":
+                self._song.jump_to_prev_cue()
+            return {"direction": direction}
+        except Exception as e:
+            self.log_message("Error jumping to cue point: " + str(e))
+            raise
+
+    # ═══════════════════════════════════════════════════════════════
+    # Arrangement
+    # ═══════════════════════════════════════════════════════════════
+
+    def _set_arrangement_loop(
+        self, enabled, start_bar, end_bar, start_beat, length_beats
+    ):
+        """Enable/disable arrangement loop and set the region."""
+        try:
+            self._song.loop = bool(enabled)
+            if start_bar > 0:
+                beat_start = (start_bar - 1) * self._song.signature_numerator
+            else:
+                beat_start = start_beat
+            self._song.loop_start = float(beat_start)
+            if end_bar > 0:
+                beat_len = (end_bar - start_bar) * self._song.signature_numerator
+            elif length_beats > 0:
+                beat_len = length_beats
+            else:
+                beat_len = self._song.signature_numerator * 4
+            self._song.loop_length = float(beat_len)
+            return {
+                "enabled": bool(enabled),
+                "start": float(beat_start),
+                "length": float(beat_len),
+            }
+        except Exception as e:
+            self.log_message("Error setting arrangement loop: " + str(e))
+            raise
+
+    def _create_arrangement_midi_clip(
+        self, track_index, start_bar, end_bar, start_beat, length_beats, name
+    ):
+        """Create an empty MIDI clip in the arrangement."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            if start_bar > 0:
+                start_time = (start_bar - 1) * self._song.signature_numerator
+            else:
+                start_time = start_beat
+            if end_bar > 0:
+                length = (end_bar - start_bar) * self._song.signature_numerator
+            else:
+                length = length_beats
+            clip = track.create_clip(start_time, length)
+            if name:
+                clip.name = str(name)
+            return {
+                "track_index": track_index,
+                "start_time": start_time,
+                "length": length,
+                "name": clip.name,
+            }
+        except Exception as e:
+            self.log_message("Error creating arrangement clip: " + str(e))
+            raise
+
+    def _create_arrangement_audio_clip(
+        self, track_index, file_path, start_bar, start_beat
+    ):
+        """Place an audio file as a clip in the arrangement."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            if start_bar > 0:
+                start_time = (start_bar - 1) * self._song.signature_numerator
+            else:
+                start_time = start_beat
+            try:
+                from ableton.v2.audio_file import AudioFile
+
+                audio_file = AudioFile(path=file_path.encode("utf-8"))
+                clip = track.create_clip(start_time, audio_file.length)
+                clip.set_audio_file(audio_file)
+                return {
+                    "track_index": track_index,
+                    "start_time": start_time,
+                    "file_path": file_path,
+                }
+            except ImportError:
+                clip = track.create_clip(start_time, 4.0)
+                return {
+                    "track_index": track_index,
+                    "start_time": start_time,
+                    "warning": "AudioFile not available, created empty clip",
+                }
+        except Exception as e:
+            self.log_message("Error creating arrangement audio clip: " + str(e))
+            raise
+
+    def _duplicate_clip_to_arrangement(
+        self, track_index, clip_index, destination_bar, destination_beat
+    ):
+        """Copy a session clip to the arrangement."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            if clip_index < 0 or clip_index >= len(track.clip_slots):
+                raise IndexError("Clip slot index out of range")
+            if not track.clip_slots[clip_index].has_clip:
+                raise ValueError("No clip in this slot")
+            if destination_bar > 0:
+                dest_time = (destination_bar - 1) * self._song.signature_numerator
+            else:
+                dest_time = destination_beat
+            track.duplicate_clip_to_arrangement(
+                track.clip_slots[clip_index].clip, float(dest_time)
+            )
+            return {
+                "track_index": track_index,
+                "clip_index": clip_index,
+                "destination_time": dest_time,
+            }
+        except Exception as e:
+            self.log_message("Error duplicating clip to arrangement: " + str(e))
+            raise
+
+    # ═══════════════════════════════════════════════════════════════
+    # Automation Management
+    # ═══════════════════════════════════════════════════════════════
+
+    def _manage_clip_automation(
+        self, track_index, clip_index, clip_name, action, parameter_name
+    ):
+        """Create or clear automation envelopes on arrangement clips."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            clips = list(track.arrangement_clips)
+            if clip_name:
+                clip = None
+                for c in clips:
+                    if c.name == clip_name:
+                        clip = c
+                        break
+                if not clip:
+                    raise ValueError("Clip not found: " + clip_name)
+            else:
+                if clip_index < 1 or clip_index > len(clips):
+                    raise IndexError("Clip index out of range")
+                clip = clips[clip_index - 1]
+            param = self._resolve_envelope_target(track, parameter_name)
+            if action == "create":
+                env = clip.create_automation_envelope(param)
+                return {"created": True, "parameter": parameter_name}
+            elif action == "clear":
+                clip.clear_envelope(param)
+                return {"cleared": True, "parameter": parameter_name}
+            elif action == "clear_all":
+                for p in [track.mixer_device.volume, track.mixer_device.panning]:
+                    try:
+                        clip.clear_envelope(p)
+                    except Exception:
+                        pass
+                return {"cleared_all": True}
+            return {"action": action}
+        except Exception as e:
+            self.log_message("Error managing clip automation: " + str(e))
+            raise
+
+    def _add_clip_envelope_point(
+        self, track_index, clip_index, target, time, value, duration, is_arrangement
+    ):
+        """Write an automation point or step into a clip's envelope."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            if is_arrangement:
+                clips = list(track.arrangement_clips)
+                if clip_index < 0 or clip_index >= len(clips):
+                    raise IndexError("Clip index out of range")
+                clip = clips[clip_index]
+            else:
+                if clip_index < 0 or clip_index >= len(track.clip_slots):
+                    raise IndexError("Clip slot index out of range")
+                if not track.clip_slots[clip_index].has_clip:
+                    raise ValueError("No clip in this slot")
+                clip = track.clip_slots[clip_index].clip
+            param = self._resolve_envelope_target(track, target)
+            env = clip.automation_envelope(param)
+            if env is None:
+                env = clip.create_automation_envelope(param)
+            env.insert_step(float(time), float(value), float(duration))
+            return {
+                "time": time,
+                "value": value,
+                "duration": duration,
+                "target": target,
+            }
+        except Exception as e:
+            self.log_message("Error adding envelope point: " + str(e))
+            raise
+
+    def _clear_clip_envelope(self, track_index, clip_index, target, is_arrangement):
+        """Clear automation envelope for a parameter on a clip."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            if is_arrangement:
+                clips = list(track.arrangement_clips)
+                if clip_index < 0 or clip_index >= len(clips):
+                    raise IndexError("Clip index out of range")
+                clip = clips[clip_index]
+            else:
+                if clip_index < 0 or clip_index >= len(track.clip_slots):
+                    raise IndexError("Clip slot index out of range")
+                if not track.clip_slots[clip_index].has_clip:
+                    raise ValueError("No clip in this slot")
+                clip = track.clip_slots[clip_index].clip
+            param = self._resolve_envelope_target(track, target)
+            clip.clear_envelope(param)
+            return {"cleared": True, "target": target}
+        except Exception as e:
+            self.log_message("Error clearing clip envelope: " + str(e))
+            raise
+
+    def _experiment_envelope(self, track_index, clip_index, target, is_arrangement):
+        """Run comprehensive envelope experiments."""
+        results = {}
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            if is_arrangement:
+                clips = list(track.arrangement_clips)
+                if clip_index < 0 or clip_index >= len(clips):
+                    raise IndexError("Clip index out of range")
+                clip = clips[clip_index]
+                results["clip_type"] = "arrangement"
+            else:
+                if clip_index < 0 or clip_index >= len(track.clip_slots):
+                    raise IndexError("Clip slot index out of range")
+                if not track.clip_slots[clip_index].has_clip:
+                    raise ValueError("No clip in this slot")
+                clip = track.clip_slots[clip_index].clip
+                results["clip_type"] = "session"
+            param = self._resolve_envelope_target(track, target)
+            results["param_name"] = param.name
+            results["param_value"] = param.value
+            results["clip_name"] = clip.name
+            results["clip_length"] = clip.length
+            # Test 1: get existing envelope
+            env = clip.automation_envelope(param)
+            results["existing_envelope"] = env is not None
+            if env is None:
+                try:
+                    env = clip.create_automation_envelope(param)
+                    results["created_envelope"] = True
+                except Exception as e:
+                    results["create_error"] = str(e)
+            if env is not None:
+                try:
+                    env.insert_step(0.0, param.value, 0.0)
+                    results["insert_step_point"] = True
+                except Exception as e:
+                    results["insert_step_point_error"] = str(e)
+                try:
+                    env.insert_step(1.0, param.value, 1.0)
+                    results["insert_step_duration"] = True
+                except Exception as e:
+                    results["insert_step_duration_error"] = str(e)
+                try:
+                    events = env.events_in_range(0.0, clip.length)
+                    results["events_in_range"] = len(events) if events else 0
+                except Exception as e:
+                    results["events_in_range_error"] = str(e)
+            return results
+        except Exception as e:
+            self.log_message("Error in envelope experiments: " + str(e))
+            return {"error": str(e)}
+
+    def _envelope_dump(self, track_index, clip_index, is_arrangement):
+        """Ultra-exhaustive dump of clip envelope state."""
+        results = {}
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            if is_arrangement:
+                clips = list(track.arrangement_clips)
+                if clip_index < 0 or clip_index >= len(clips):
+                    raise IndexError("Clip index out of range")
+                clip = clips[clip_index]
+            else:
+                if clip_index < 0 or clip_index >= len(track.clip_slots):
+                    raise IndexError("Clip slot index out of range")
+                if not track.clip_slots[clip_index].has_clip:
+                    raise ValueError("No clip in this slot")
+                clip = track.clip_slots[clip_index].clip
+            results["clip_name"] = clip.name
+            results["clip_length"] = clip.length
+            results["is_midi_clip"] = getattr(clip, "is_midi_clip", None)
+            results["is_audio_clip"] = getattr(clip, "is_audio_clip", None)
+            # List all params to check for envelopes
+            params_to_check = []
+            try:
+                for p in track.mixer_device.volume, track.mixer_device.panning:
+                    params_to_check.append(("mixer", p.name, p))
+                for s in track.mixer_device.sends:
+                    params_to_check.append(("send", s.name, s))
+                for d_idx, d in enumerate(track.devices):
+                    for p in d.parameters:
+                        params_to_check.append(("device_%d" % d_idx, p.name, p))
+            except Exception as e:
+                results["param_enum_error"] = str(e)
+            envs_found = []
+            for cat, pname, param in params_to_check:
+                try:
+                    env = clip.automation_envelope(param)
+                    if env is not None:
+                        envs_found.append(
+                            {
+                                "category": cat,
+                                "parameter": pname,
+                                "has_envelope": True,
+                            }
+                        )
+                except Exception:
+                    pass
+            results["envelopes_found"] = envs_found
+            return results
+        except Exception as e:
+            self.log_message("Error in envelope dump: " + str(e))
+            return {"error": str(e)}
+
+    def _test_create_event(self, track_index, clip_index, target, time, value):
+        """Test various create_event signatures on the clip envelope."""
+        results = {}
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+            clips = list(track.arrangement_clips)
+            if clip_index < 0 or clip_index >= len(clips):
+                raise IndexError("Clip index out of range")
+            clip = clips[clip_index]
+            param = self._resolve_envelope_target(track, target)
+            env = clip.automation_envelope(param)
+            if env is None:
+                env = clip.create_automation_envelope(param)
+            # Try create_event with different signatures
+            for args_desc, args in [
+                ("(time, value)", (float(time), float(value))),
+                ("(time, value, duration)", (float(time), float(value), 0.0)),
+            ]:
+                try:
+                    if len(args) == 2:
+                        env.create_event(*args)
+                    else:
+                        env.create_event(*args)
+                    results[args_desc] = "success"
+                except Exception as e:
+                    results[args_desc] = "error: " + str(e)
+            return results
+        except Exception as e:
+            self.log_message("Error testing create_event: " + str(e))
+            return {"error": str(e)}
+
+    # ═══════════════════════════════════════════════════════════════
+    # Track Deletion Safety
+    # ═══════════════════════════════════════════════════════════════
+
+    def _get_track_deletion_status(self):
+        """Check if tracks can be deleted safely."""
+        try:
+            track_count = len(self._song.tracks)
+            return {
+                "track_count": track_count,
+                "can_delete_any": track_count > 1,
+                "min_tracks_remaining": 1,
+            }
+        except Exception as e:
+            self.log_message("Error getting deletion status: " + str(e))
             raise

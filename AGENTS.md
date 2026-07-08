@@ -11,6 +11,8 @@ Supporting files: `capture_audio.py` (standalone CLI capture), `dashboard/app.py
 
 **Single RS file:** `AbletonMCP_Remote_Script.py` is the source of truth. Deployed to `AbletonMCP/__init__.py` (and `AbletonMCPExtended/__init__.py`).
 
+**Plugin control reference:** See [`PLUGINS.md`](PLUGINS.md) for detailed capabilities of each plugin type (native synths, external VSTs, Surge XT via OSC) and how to control them.
+
 ## Development Workflow
 
 | Command | Description |
@@ -22,6 +24,19 @@ Supporting files: `capture_audio.py` (standalone CLI capture), `dashboard/app.py
 1. Edit `AbletonMCP_Remote_Script.py`
 2. Run `python deploy_rs.py` (copies to both RS dirs, clears cache, sends `reload` command)
 3. Changes apply immediately — no Ableton restart needed
+
+### Testing MCP server changes (no RS change)
+
+When modifying only `ableton_full_mcp_server.py` (adding/editing tool wrappers that call existing RS commands):
+
+1. Stop the running MCP server (Ctrl+C)
+2. Restart it: `.venv/Scripts/python ableton_full_mcp_server.py`
+3. Test via any MCP client — the new tools appear automatically in the tool list
+4. No Ableton restart or RS deploy needed
+
+When modifying both the RS and the server:
+1. First run `python deploy_rs.py` (RS changes take effect immediately)
+2. Then restart the MCP server
 
 ## Setup & Commands
 
@@ -141,6 +156,31 @@ def my_tool(param1: str, param2: int = 0) -> dict:
     """Description visible to LLM as tool definition."""
     ...
     return {"key": "value"}
+```
+
+### Instrument Workflow
+
+Lors de la création d'un morceau, privilégier dans cet ordre :
+1. Drum Rack ou kit natif Ableton (browser > drums) pour les percussions
+2. Synthés natifs Ableton (Wavetable, Analog, Drift, Operator) pour basses, nappes, leads
+3. Packs Core Library (Piano & Keys, Strings, etc.) pour instruments acoustiques
+4. Surge XT uniquement si un son spécifique est introuvable dans les natifs
+
+Browser items (URI) se chargent avec `load_instrument_or_effect`:
+- Synthés : `query:Synths#Wavetable`, `query:Synths#Analog`, `query:Synths#Drift`, `query:Synths#Operator`
+- Drums : `query:Drums#Drum%20Rack` (device), `query:Drums#FileId_XXXX` (preset kit)
+- Sounds : `query:Sounds#Piano%20&%20Keys`, `query:Sounds#Strings`, `query:Sounds#Pad`, etc.
+- Plugins externes : `plugins/VST3/Surge Synth Team/Surge XT`
+
+### Indexing Convention (CRITICAL)
+
+**ALL track and clip indices are 0-based** — matching Live's Python API (`song.tracks[0]` = first track after Master). This applies to every tool parameter named `track_index`, `clip_index`, `device_index`, `chain_index`, `scene_index`, `send_index`.
+
+```
+track_index 0 → song.tracks[0] → first session track
+track_index 1 → song.tracks[1] → second session track
+clip_index 0   → clip_slots[0]  → first clip slot
+device_index 0 → devices[0]     → first device
 ```
 
 ### Architecture Notes

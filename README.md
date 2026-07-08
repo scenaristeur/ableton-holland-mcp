@@ -129,85 +129,191 @@ Le script se trouve aussi dans le dépôt GitHub original : [ahujasid/ableton-mc
 
 Le serveur `ableton-full` (unifié) remplace les deux anciens serveurs (`ableton-mcp` + `music-analysis`). Un seul process, outils atomiques comme `capture_at_position`.
 
-## Outils MCP disponibles (serveur unifié `ableton-full`)
+## Outils MCP disponibles (128 tools)
 
-### Capture audio atomique (nouveau)
+Tous les indices sont **0-based** (`track_index=0` = première piste après Master).
 
-| Tool | Description |
-|---|---|
-| `capture_at_position(position_beats, duration_sec, output_name)` | Stop → switch view → seek → play → capture (bloque `duration_sec` s) → stop → load WAV |
-| `capture_and_analyze(position_beats, duration_sec, output_name)` | `capture_at_position` + analyse complète en un seul appel |
-| `capture_ableton(duration, output_name)` | Capture audio depuis VB-Cable (standalone) |
-
-### Analyse (fichier existant)
+### Session / Transport
 
 | Tool | Description |
 |---|---|
-| `load(file_path)` | Charge un fichier audio (fix: `np.mean` au lieu de `librosa.to_mono`) |
-| `analyze_full_tool(y_path)` | Tout-en-un : key, energy, spectral, tuning, tempo |
+| `get_session_info()` | Tempo, signature, track count, playback state |
+| `set_tempo(bpm)` | Changer le tempo |
+| `start_playback()` / `stop_playback()` | Démarrer / arrêter |
+| `start_playback_at(time)` | Seek + play atomique (Live reset le temps au `start_playing()`) |
+| `set_arrangement_time(time)` | Positionner le playhead |
+| `set_metronome(value)` / `get_metronome()` | Métronome on/off |
+| `set_session_record(value)` / `get_session_record()` | Record on/off |
+| `nudge_up()` / `nudge_down()` | Tempo nudge |
+| `set_signature(numerator, denominator)` | Signature rythmique |
+| `switch_to_arrangement_view()` | Vue Arrangement |
+
+### Pistes
+
+| Tool | Description |
+|---|---|
+| `create_midi_track(index=-1)` | Nouvelle piste MIDI (fin de liste) |
+| `set_track_name(index, name)` | Renommer |
+| `delete_track(index, track_name)` | Supprimer par index ou nom |
+| `duplicate_track(index)` | Dupliquer |
+| `select_track(index)` | Sélectionner dans l'UI |
+| `get_track_info(index)` | Nom, devices, clip slots, volume, pan |
+| `get_track_color(index)` / `set_track_color(index, color)` | Couleur (0–255) |
+| `get_track_deletion_status()` | Vérifier si supression possible |
+
+### Clips Session
+
+| Tool | Description |
+|---|---|
+| `create_clip(track, slot, length)` | Nouveau clip MIDI |
+| `create_audio_clip(track, slot, path)` | Importer audio (Live 12.0.5+) |
+| `add_notes_to_clip(track, slot, notes)` | Ajouter notes MIDI |
+| `get_clip_notes(track, slot)` | Lire notes MIDI |
+| `set_clip_name(track, slot, name)` | Nommer |
+| `fire_clip(track, slot)` / `stop_clip(track, slot)` | Lancer / arrêter |
+| `duplicate_clip(track, slot)` | Dupliquer |
+| `quantize_clip(track, slot, amount, quantize_to)` | Quantifier |
+| `delete_session_clip(track, slot)` | Supprimer |
+| `get_clip_color(track, slot)` / `set_clip_color(track, slot, color)` | Couleur (0–255) |
+
+### Arrangement
+
+| Tool | Description |
+|---|---|
+| `get_arrangement_clips(track)` | Lister clips |
+| `get_arrangement_clip_notes(track, clip)` | Lire notes MIDI |
+| `set_arrangement_clip_notes(track, clip, notes)` | Écrire notes MIDI |
+| `delete_arrangement_clip(track, clip)` | Supprimer clip |
+| `set_arrangement_clip_name(track, clip, name)` | Renommer |
+| `duplicate_to_arrangement(track, slot, dest_time)` | Copier session → arrangement |
+| `duplicate_clip_to_arrangement(track, slot, dest_bar, dest_beat)` | Copier session → arrangement (bar/beat) |
+| `create_arrangement_midi_clip(track, ...)` | Créer clip MIDI arrangement |
+| `create_arrangement_audio_clip(track, file, ...)` | Placer fichier audio |
+| `set_arrangement_loop(enabled, start, end, ...)` | Boucle arrangement |
+| `set_arrangement_clip_gain(track, clip, gain)` | Gain clip audio (dB) |
+| `set_arrangement_clip_pitch(track, clip, coarse, fine)` | Pitch (semitones/cents) |
+| `set_arrangement_clip_warp(track, clip, on, mode)` | Warp (0=beats..5=complex-pro) |
+| `set_arrangement_clip_markers(track, clip, start, end)` | Marqueurs (beats) |
+
+### Mixer
+
+| Tool | Description |
+|---|---|
+| `set_track_volume(track, 0.0–1.0)` | Volume (0.85 = 0 dB) |
+| `get_track_volume(track)` | Volume + pan actuels |
+| `set_track_panning(track, -1.0–1.0)` | Pan |
+| `set_track_solo(track, bool)` / `set_track_mute(track, bool)` | Solo / mute |
+| `get_sends(track)` / `set_send(track, send, 0.0–1.0)` | Envois |
+| `set_monitoring(track, 0=auto, 1=in, 2=off)` | Monitoring |
+| `get_crossfader()` / `set_crossfader(0.0–1.0)` | Crossfader |
+| `get_groove_amount()` / `set_groove_amount(0.0–1.0)` | Groove global |
+
+### Master
+
+| Tool | Description |
+|---|---|
+| `get_master_track()` | Infos master (volume, pan, devices) |
+| `set_master_volume(0.0–1.0)` | Volume master |
+| `set_master_panning(-1.0–1.0)` | Pan master |
+| `get_master_device_parameters(device)` | Paramètres d'un device master |
+| `set_master_device_parameter(device, name, value)` | Modifier paramètre master |
+| `load_instrument_or_effect_on_master(uri)` | Charger effet sur master |
+
+### Browser / Instruments
+
+| Tool | Description |
+|---|---|
+| `get_browser_tree(category_type)` | Arborescence complète |
+| `get_browser_categories(category_type)` | Catégories |
+| `get_browser_items(path, item_type)` | Items d'un chemin |
+| `get_browser_item(uri, path)` | Un item spécifique |
+| `get_browser_items_at_path(path)` | Items à un chemin |
+| `load_instrument_or_effect(track, uri)` | Charger instrument/effet par URI |
+| `load_external_plugin(track, name)` | Charger plugin VST/AU par nom |
+| `list_external_plugins(query)` | Lister plugins externes |
+| `load_drum_kit(track, rack_uri, kit_path)` | Charger drum rack + kit |
+
+### Devices
+
+| Tool | Description |
+|---|---|
+| `get_device_parameters(track, device)` | Lire tous les paramètres |
+| `set_device_parameter(track, device, name, value)` | Modifier un paramètre |
+| `delete_device(track, device)` | Supprimer un device |
+| `enable_device(track, device)` / `disable_device(track, device)` | Activer / bypasser |
+| `navigate_device_preset(track, device, direction)` | Preset suivant/précédent |
+| `get_chain_info(track, device, chain)` | Chaînes dans un rack |
+| `get_drum_pad_info(track, device)` | Pads remplis dans un Drum Rack |
+
+### Cue Points
+
+| Tool | Description |
+|---|---|
+| `get_cue_points()` | Lister tous les cue points |
+| `create_cue_point(bar, beat, name)` | Créer un cue point |
+| `delete_cue_point(bar, beat)` | Supprimer un cue point |
+| `jump_to_cue_point(direction, name)` | Sauter au suivant/précédent/par nom |
+
+### Vue
+
+| Tool | Description |
+|---|---|
+| `set_ableton_view(view)` | Changer de vue (Arranger, Session, Detail, Browser...) |
+| `control_arrangement_view(action, track)` | Zoom, scroll, follow, collapse/expand |
+
+### Automation / Enveloppes
+
+| Tool | Description |
+|---|---|
+| `get_arrangement_clip_envelope(track, clip, target, is_arrangement)` | Lire envelope |
+| `set_automation_curve(track, clip, target, points, is_arrangement)` | Écrire courbe d'automation |
+| `manage_clip_automation(track, clip, action, parameter_name)` | Créer / effacer enveloppes |
+| `add_clip_envelope_point(track, clip, target, time, value, duration)` | Ajouter un point |
+| `clear_clip_envelope(track, clip, target, is_arrangement)` | Effacer enveloppe |
+| `debug_clip_envelopes(track, clip, is_arrangement)` | Diagnostic exhaustif |
+| `experiment_envelope(track, clip, target, is_arrangement)` | Tests automatisés |
+| `envelope_dump(track, clip, is_arrangement)` | Dump complet état |
+| `test_create_event(track, clip, target, time, value)` | Test signatures `create_event` |
+
+### Routing
+
+| Tool | Description |
+|---|---|
+| `get_track_routing(track)` | Routing entrée/sortie |
+| `set_track_input_routing(track, type, channel)` | Source d'entrée |
+| `set_track_output_routing(track, type, channel)` | Destination sortie |
+
+### Projet / Système
+
+| Tool | Description |
+|---|---|
+| `save_project()` | Sauvegarder (non dispo Live 12 Lite) |
+| `undo()` / `redo()` | Annuler / rétablir |
+| `freeze_track(track)` / `flatten_track(track)` | Freeze / flatten |
+| `create_scene(index)` / `fire_scene(index)` | Créer / lancer une scene |
+| `get_cpu_load()` | CPU average + peak |
+| `get_live_version()` | Version Live + build ID |
+| `get_tempo_follower()` / `set_tempo_follower(enabled)` | Tempo follower |
+| `get_control_surfaces()` | Control surfaces actives |
+| `show_message(text)` | Message dans la barre d'état |
+| `reload_script()` | Hot-reload du Remote Script |
+
+### Capture & Analyse Audio
+
+| Tool | Description |
+|---|---|
+| `capture_and_analyze(position_beats, duration_sec, output_name)` | Capture + analyse complète en un appel |
+| `load_tool(path)` | Charger fichier audio |
+| `analyze_full_tool(y_path)` | Tout-en-un : key, energy, spectral, tempo, tuning |
 | `analyze_energy_tool(y_path)` | RMS, peak, dynamic range |
 | `analyze_spectral_tool(y_path)` | Centroid, rolloff, bandwidth, ZCR |
 | `analyze_tuning_tool(y_path)` | Cents offset |
-| `detect_key_tool(y_path)` | Détection tonalité (Krumhansl-Kessler) |
-| `tempo_tool(y_path)` | Estime le BPM |
-| `get_duration_tool(y_path)` | Durée en secondes |
-| `beat_track_tool(y_path)` | Détecte les temps forts |
+| `detect_key_tool(y_path)` | Tonalité (Krumhansl-Kessler) |
+| `tempo_tool(y_path)` | BPM |
+| `get_duration_tool(y_path)` | Durée secondes |
+| `beat_track_tool(y_path)` | Temps forts |
 | `chroma_cqt_tool(y_path)` | Chromagram (12 notes) |
 | `mfcc_tool(y_path)` | Timbre / texture spectrale |
-
-### Contrôle Ableton (Session / Transport)
-
-| Tool | Description |
-|---|---|
-| `get_session_info()` | Tempo, signature, tracks, is_playing, current_song_time |
-| `get_track_info(index)` | Détails d'une piste (nom, clips, devices, volume, pan) |
-| `set_tempo(bpm)` | Changer le tempo |
-| `start_playback()` / `stop_playback()` | Démarrer/arrêter |
-| `start_playback_at(time)` | **Start playback first, THEN seek** (correction : Live reset le temps au `start_playing()`) |
-| `set_arrangement_time(time)` | Positionner le playhead |
-
-### Pistes & Clips
-
-| Tool | Description |
-|---|---|
-| `create_midi_track(index)` | Nouvelle piste MIDI |
-| `set_track_name(index, name)` | Renommer |
-| `delete_track(index)` | Supprimer |
-| `duplicate_track(index)` | Dupliquer |
-| `create_clip(track, slot, length)` | Nouveau clip MIDI |
-| `add_notes_to_clip(track, slot, notes)` | Ajouter des notes MIDI |
-| `get_clip_notes(track, slot)` | Lire les notes MIDI |
-| `set_clip_name(track, slot, name)` | Nommer un clip |
-| `fire_clip(track, slot)` / `stop_clip(track, slot)` | Lancer/arrêter un clip |
-| `duplicate_clip(track, slot)` | Dupliquer un clip |
-| `delete_session_clip(track, slot)` | Supprimer clip session |
-| `delete_arrangement_clip(track, index)` | Supprimer clip arrangement |
-| `quantize_clip(track, slot, amount)` | Quantifier (0.0–1.0) |
-| `duplicate_to_arrangement(track, slot, dest_time)` | Copier clip Session → Arrangement |
-| `get_arrangement_clips(track)` | Lister clips arrangement |
-
-### Instruments & Effets
-
-| Tool | Description |
-|---|---|
-| `get_browser_tree(category)` | Explorer le browser |
-| `get_browser_items_at_path(path)` | Items à un chemin |
-| `load_instrument_or_effect(track, uri)` | Charger un instrument/effet |
-| `get_device_parameters(track, device)` | Lire les paramètres d'un device |
-| `set_device_parameter(track, device, name, value)` | Modifier un paramètre |
-
-### Scenes, Mixer, Projet
-
-| Tool | Description |
-|---|---|
-| `create_scene(index)` / `fire_scene(index)` | Créer/lancer une scene |
-| `set_track_volume(track, value)` | Volume piste (0.0–1.0) |
-| `get_sends(track)` / `set_send(track, send, value)` | Envois |
-| `set_monitoring(track, state)` | Monitoring (0=auto, 1=in, 2=off) |
-| `freeze_track(index)` / `flatten_track(index)` | Freeze/flatten |
-| `set_track_color(index, color)` / `set_clip_color(...)` | Couleurs (0–255) |
-| `save_project()` | Sauvegarder (non dispo Live 12 Lite) |
-| `undo()` / `redo()` | Annuler/rétablir |
 
 ## Structure du projet
 

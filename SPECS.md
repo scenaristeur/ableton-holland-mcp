@@ -21,3 +21,12 @@
 
 ### Export
 - Tool `export_audio()` pour lancer l'export d'Ableton (si l'API le permet)
+
+### Script test plugins
+- Créer un script `test_plugins.py` qui pour chaque plugin externe :
+  1. Le charge sur une piste
+  2. Appelle `get_device_parameters()` et enregistre le nombre + noms des paramètres
+  3. Mesure la charge CPU avant/après activation
+  4. Supprime la piste
+  5. Génère un rapport complet dans `PLUGINS.md`
+- Automatiser le déploiement des résultats dans `PLUGINS.md`
