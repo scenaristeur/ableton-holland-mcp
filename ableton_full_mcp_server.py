@@ -20,10 +20,23 @@ import numpy as np
 import pandas as pd
 import sounddevice as sd
 import soundfile as sf
-import librosa
-import librosa.util
 
 from fastmcp import FastMCP
+
+
+# Lazy librosa import — avoids slow numba JIT compilation at startup
+# on low-resource machines. First analysis call will trigger the import.
+_librosa = None
+
+
+def _L() -> Any:  # noqa: E731
+    global _librosa
+    if _librosa is None:
+        import librosa  # type: ignore[import-untyped]
+
+        _librosa = librosa
+    return _librosa
+
 
 # ── Ableton MCP Helpers ─────────────────────────────────────────────────────
 
@@ -136,7 +149,7 @@ def load(path: str) -> dict:
     """Load audio file and return y_path."""
     audio, sr = sf.read(path)
     y = np.mean(audio, axis=1) if audio.ndim > 1 else audio
-    y = librosa.util.normalize(y)
+    y = _L().util.normalize(y)
     y_path = str(ANALYSES_DIR / f"{Path(path).stem}_y.csv")
     pd.DataFrame(y).to_csv(y_path, header=False, index=False)
     return {"y_path": y_path, "audio_path": path}
@@ -160,8 +173,8 @@ def tempo(
     """Estimate tempo."""
     y = _read_y(y_path)
     sr = 22050
-    onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop_length)
-    bpm = librosa.beat.tempo(
+    onset_env = _L().onset.onset_strength(y=y, sr=sr, hop_length=hop_length)
+    bpm = _L().beat.tempo(
         onset_envelope=onset_env,
         sr=sr,
         hop_length=hop_length,
@@ -181,14 +194,14 @@ def beat_track(
     """Beat tracking."""
     y = _read_y(y_path)
     sr = 22050
-    onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop_length)
-    frames = librosa.beat.beat_track(
+    onset_env = _L().onset.onset_strength(y=y, sr=sr, hop_length=hop_length)
+    frames = _L().beat.beat_track(
         onset_envelope=onset_env, sr=sr, hop_length=hop_length, start_bpm=start_bpm
     )[1]
     if units == "time":
-        beats = librosa.frames_to_time(frames, sr=sr, hop_length=hop_length).tolist()
+        beats = _L().frames_to_time(frames, sr=sr, hop_length=hop_length).tolist()
     elif units == "samples":
-        beats = librosa.frames_to_samples(frames, hop_length=hop_length).tolist()
+        beats = _L().frames_to_samples(frames, hop_length=hop_length).tolist()
     else:
         beats = frames.tolist()
     return {"beats": beats, "units": units}
@@ -204,7 +217,7 @@ def chroma_cqt(
     """Compute chromagram."""
     y = _read_y(y_path)
     sr = 22050
-    chroma = librosa.feature.chroma_cqt(
+    chroma = _L().feature.chroma_cqt(
         y=y,
         sr=sr,
         hop_length=hop_length,
@@ -213,7 +226,7 @@ def chroma_cqt(
         n_octaves=n_octaves,
     )
     note_names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-    times = librosa.frames_to_time(
+    times = _L().frames_to_time(
         np.arange(chroma.shape[1]), sr=sr, hop_length=hop_length
     )
     data = []
@@ -230,7 +243,7 @@ def mfcc(y_path: str) -> str:
     """Compute MFCC."""
     y = _read_y(y_path)
     sr = 22050
-    mfcc_features = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+    mfcc_features = _L().feature.mfcc(y=y, sr=sr, n_mfcc=13)
     mfcc_path = str(ANALYSES_DIR / f"{Path(y_path).stem}_mfcc.csv")
     pd.DataFrame(mfcc_features).to_csv(mfcc_path, index=False, header=False)
     return mfcc_path
@@ -240,7 +253,7 @@ def analyze_energy(y_path: str) -> dict:
     """Analyze energy and dynamics."""
     y = _read_y(y_path)
     sr = 22050
-    rms = librosa.feature.rms(y=y)[0]
+    rms = _L().feature.rms(y=y)[0]
     peak = float(np.max(np.abs(y)))
     rms_db = 20 * np.log10(np.maximum(1e-5, np.array([float(np.mean(rms))])))
     peak_db = 20 * np.log10(np.maximum(1e-5, np.array([peak])))
@@ -258,10 +271,10 @@ def analyze_spectral(y_path: str) -> dict:
     """Analyze spectral characteristics."""
     y = _read_y(y_path)
     sr = 22050
-    centroid = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
-    rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)[0]
-    bandwidth = librosa.feature.spectral_bandwidth(y=y, sr=sr)[0]
-    zcr = librosa.feature.zero_crossing_rate(y)[0]
+    centroid = _L().feature.spectral_centroid(y=y, sr=sr)[0]
+    rolloff = _L().feature.spectral_rolloff(y=y, sr=sr)[0]
+    bandwidth = _L().feature.spectral_bandwidth(y=y, sr=sr)[0]
+    zcr = _L().feature.zero_crossing_rate(y)[0]
     return {
         "centroid_mean": float(np.mean(centroid)),
         "centroid_std": float(np.std(centroid)),
@@ -277,10 +290,10 @@ def analyze_tuning(y_path: str) -> dict:
     """Analyze tuning offset."""
     y = _read_y(y_path)
     sr = 22050
-    chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+    chroma = _L().feature.chroma_cqt(y=y, sr=sr)
     chroma_mean = chroma.mean(axis=1)
-    fft = np.abs(librosa.stft(y))
-    freqs = librosa.fft_frequencies(sr=sr)
+    fft = np.abs(_L().stft(y))
+    freqs = _L().fft_frequencies(sr=sr)
     spec = np.mean(fft, axis=1)
     peak_freq = freqs[np.argmax(spec)]
     a4_freq = 440.0
@@ -292,7 +305,7 @@ def detect_key(y_path: str) -> dict:
     """Detect key using Krumhansl-Kessler."""
     y = _read_y(y_path)
     sr = 22050
-    chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+    chroma = _L().feature.chroma_cqt(y=y, sr=sr)
     return _detect_key_from_chroma(chroma)
 
 
@@ -568,7 +581,11 @@ def get_browser_item(uri: str = "", path: str = "") -> dict[str, Any]:
 @app.tool()
 def load_instrument_or_effect(track_index: int, uri: str) -> dict[str, Any]:
     """Load an instrument/effect onto a track by URI."""
-    return _cmd("load_instrument_or_effect", track_index=track_index, uri=uri)
+    return _send_command(
+        "load_instrument_or_effect",
+        {"track_index": track_index, "uri": uri},
+        timeout=TIMEOUT_LONG,
+    )
 
 
 @app.tool()
@@ -1739,17 +1756,22 @@ if __name__ == "__main__":
     # Preload librosa modules — first call to chroma/beat/tempo triggers
     # numba compilation which can take 5-15s. Do it at startup so the first
     # capture doesn't time out.
+    # Wrapped in try/except so limited CPU/memory doesn't block server startup.
     try:
         sr = 22050
-        dummy = np.zeros(sr * 3, dtype=np.float32)  # 3s of silence
-        _ = librosa.feature.rms(y=dummy)[0]
-        _ = librosa.feature.spectral_centroid(y=dummy, sr=sr)[0]
-        _ = librosa.feature.zero_crossing_rate(dummy)[0]
-        _ = librosa.feature.chroma_cqt(y=dummy, sr=sr, n_chroma=12)
-        _ = librosa.beat.tempo(y=dummy, sr=sr)
-        _ = librosa.feature.mfcc(y=dummy, sr=sr, n_mfcc=13)
-        _ = librosa.onset.onset_strength(y=dummy, sr=sr)
+        dummy = np.zeros(sr * 1, dtype=np.float32)  # 1s of silence (was 3s)
+        _ = _L().feature.rms(y=dummy)[0]
+        _ = _L().feature.spectral_centroid(y=dummy, sr=sr)[0]
+        _ = _L().feature.zero_crossing_rate(dummy)[0]
+        _ = _L().feature.chroma_cqt(y=dummy, sr=sr, n_chroma=12)
+        _ = _L().beat.tempo(y=dummy, sr=sr)
+        _ = _L().feature.mfcc(y=dummy, sr=sr, n_mfcc=13)
+        _ = _L().onset.onset_strength(y=dummy, sr=sr)
     except Exception:
-        pass  # Preload is best-effort
+        import warnings
+
+        warnings.warn(
+            "librosa preload skipped (low resources) — first analysis call may be slow"
+        )
 
     app.run(transport="stdio")

@@ -161,14 +161,14 @@ def my_tool(param1: str, param2: int = 0) -> dict:
 ### Instrument Workflow
 
 Lors de la création d'un morceau, privilégier dans cet ordre :
-1. Drum Rack ou kit natif Ableton (browser > drums) pour les percussions
+1. Drum Kit ou kit natif Ableton (browser > drums) pour les percussions
 2. Synthés natifs Ableton (Wavetable, Analog, Drift, Operator) pour basses, nappes, leads
 3. Packs Core Library (Piano & Keys, Strings, etc.) pour instruments acoustiques
 4. Surge XT uniquement si un son spécifique est introuvable dans les natifs
 
 Browser items (URI) se chargent avec `load_instrument_or_effect`:
 - Synthés : `query:Synths#Wavetable`, `query:Synths#Analog`, `query:Synths#Drift`, `query:Synths#Operator`
-- Drums : `query:Drums#Drum%20Rack` (device), `query:Drums#FileId_XXXX` (preset kit)
+- Drums :  `query:Drums#FileId_XXXX` (preset kit), `query:Drums#Drum%20Rack` (device)
 - Sounds : `query:Sounds#Piano%20&%20Keys`, `query:Sounds#Strings`, `query:Sounds#Pad`, etc.
 - Plugins externes : `plugins/VST3/Surge Synth Team/Surge XT`
 

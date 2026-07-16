@@ -121,14 +121,55 @@ chroma_cqt(y_path)
 
 **Problem**: mix sounds good on headphones but disappears on phone/SM/MP3.
 
-**Rules**:
-1. **Saturator on bass (mandatory)**: generates harmonics audible on small speakers
+**Core philosophy**: chaque élément doit être audible même sur des petites enceintes (téléphone, autoradio). Cela passe par :
+1. **Harmoniques** : saturer les basses pour créer des partiels audibles sans subwoofer
+2. **Midrange** : éviter les extrêmes (subs trop graves, aigus trop fins) — le médium = l'essentiel sur petit haut-parleur
+3. **Écoute multi-support** : tester sur téléphone, autoradio, petites enceintes, pas seulement au casque
+
+#### Harmonics Strategy (obligatoire pour translation)
+
+| Track | Traitement | Pourquoi |
+|---|---|---|
+| **Bass** | Saturator (Medium Curve, Drive 0.6-0.8) | Génère des harmoniques supérieures audibles sur haut-parleur 3" |
+| **Lead/Keys/Pad** | EQ bas coupé à 150-200 Hz | Enlève le mud, donne de l'air |
+| **Drums** | Compressor (glue) + EQ | Colle le kit, enlève le bruit de fond |
+| **FX/Drift** | Reverb + EQ | Donne de l'espace, coupe les basses inutiles |
+| **Master** | Limiter (max -6 dB reduction, -1 dB ceiling) | Élève le niveau général sans écrêtage violent |
+
+**Pourquoi Saturator sur la basse est critique** : un petit haut-parleur (< 10 cm) ne reproduit pas les fréquences < 150 Hz. La basse devient inaudible. Le Saturator crée des harmoniques dans le médium (200-1000 Hz) qui "suggèrent" la note de basse même si le fondamental est absent. Sans ça, le morceau sonne vide sur téléphone.
+
+#### Volume Balancing Method (éprouvé sur "Holland")
+
+1. Solo chaque piste individuellement sur une section énergétique représentative (ex: chorus final)
+2. Capturer ~4 secondes avec `capture_and_analyze`
+3. Noter `energy_rms` de chaque piste
+4. Ajuster les volumes pour que chaque RMS soit ~0.07-0.10 pour les lead, ~0.17-0.25 pour le full mix
+5. **Ne pas hésiter à monter le volume** — un mix à RMS 0.17 est sain pour l'électro (les calculs de ratio brut ne tiennent pas compte du masquage fréquentiel)
+6. Vérifier le full mix RMS ~0.15-0.25 pour un rendu percutant
+
+#### EQ Carving (prévention du masquage)
+
+Quand plusieurs instruments jouent simultanément, ils se disputent les mêmes fréquences. Solution : créer une "niche" pour chaque instrument :
+
+| Fréquence | Qui occupe | Qui doit être réduit |
+|---|---|---|
+| 50-100 Hz | Kick + Basse | Conflit : sidechain ou EQ complémentaire |
+| 200-400 Hz | Basse + Keys | Keys/Pad : HPF à ~200 Hz |
+| 1-4 kHz | Présence Lead | Keys/Pad : léger cut à 2 kHz |
+| 5-8 kHz | Air/hats | Lead : légère atténuation |
+
+Règle simple : **HPF à 150-200 Hz sur tous les instruments sauf kick et basse**.
+
+#### Règles définitives pour translation multi-support
+
+1. **Saturator on bass (mandatory)**: génère des harmoniques audibles sur petites enceintes
    - Type: Medium Curve (3), Drive: 0.60-0.80, Dry/Wet: 1.0, Color On: 1.0
 2. **Compression on drums** (glue): Threshold: 0.30, Ratio: 0.50 (~4:1), Attack: 0.10-0.15, Model: Peak (0), Makeup: On
-3. **No element under 0.70 volume** — quiet parts disappear in MP3/social compression
-4. **Send reverb as glue** — 0.10-0.25 on multiple tracks unifies mix
-5. **Spectral centroid target**: 700-900 Hz (balanced). < 700 = muddy, > 1000 = harsh
-6. **Master Limiter** (manual, not via API): Maximizer preset, -1 dB ceiling, max -6 dB reduction
+3. **No element under audible volume** — un élément trop bas disparaît sur MP3/compression social media. Laisser le volume monter si le mix global reste sous 0 dB crête.
+4. **HPF 200 Hz** sur Keys, Pad, FX (tout ce qui n'a pas besoin de sub)
+5. **Send reverb as glue** — 0.10-0.25 sur plusieurs pistes unifie le mix
+6. **Spectral centroid target**: 700-900 Hz (balanced). < 700 = muddy, > 1000 = harsh
+7. **Master Limiter** (manual, not via API): Maximizer preset, -1 dB ceiling, max -6 dB reduction
 
 **Platform targets**:
 
@@ -137,15 +178,28 @@ chroma_cqt(y_path)
 | Spotify | -14 LUFS | Normalization cuts extreme dynamics |
 | YouTube | -13 LUFS | Aggressive compression, detail loss |
 | TikTok/Insta | ~-14 LUFS | No bass, vocals saturate if too hot |
-| Phone | N/A | No < 100 Hz → bass invisible |
+| Phone speaker | N/A | No < 150 Hz → bass harmonics mandatory |
+| Car stereo | varies | Bass-heavy → peut masquer le médium |
 
 **Verification**:
 ```python
 capture_and_analyze(position_beats=0, duration_sec=20)
-# Check: energy_rms > 0.20, dynamic_range_db < 12,
+# Check: energy_rms > 0.15, dynamic_range_db 10-15,
 #        spectral_centroid_hz 700-900, spectral_rolloff_hz > 1200
 ```
 Iterate until metrics satisfactory, then advise user to export WAV 48kHz 24-bit → MP3 320k.
+
+**Charger des plugins via MCP** (EQ Eight, Saturator, Compressor) :
+```python
+# Charger un EQ Eight sur une piste
+load_instrument_or_effect(track_index=N, uri="query:AudioFx#EQ%20Eight")
+# Charger un Saturator
+load_instrument_or_effect(track_index=N, uri="query:AudioFx#Saturator")
+# Charger un Compressor
+load_instrument_or_effect(track_index=N, uri="query:AudioFx#Compressor")
+# Charger un Reverb (send/return ou directement sur piste)
+load_instrument_or_effect(track_index=N, uri="query:AudioFx#Reverb")
+```
 
 ### Surge XT Patch Workflow
 
@@ -156,6 +210,36 @@ Iterate until metrics satisfactory, then advise user to export WAV 48kHz 24-bit 
 5. `surge_get_patch(instance=N)` → verify actual loaded patch
 6. Use forward slashes `C:/...` (server auto-converts to `\`)
 7. Return value may show old template name — ignore, verify with `surge_get_patch`
+
+**Modulation routing** via `surge_map_modulation`:
+
+```python
+surge_map_modulation(
+    mod_source="a/vlfo_1/0",       # LFO source
+    target="/param/a/filter/1/cutoff",  # target param
+    depth=0.4,                      # -1.0 to 1.0 (0 = disconnect)
+    instance=0,
+)
+```
+
+Sources disponibles :
+| Source | Description |
+|---|---|
+| `a/vlfo_1/0` .. `a/vlfo_6/0` | Voice LFOs (index 0=LFO out, 1=Raw Wave, 2=EG Only) |
+| `a/slfo_1/0` .. `a/slfo_6/0` | Scene LFOs |
+| `a/feg` | Filter EG |
+| `a/aeg` | Amp EG |
+| `vel` | Velocity |
+| `keytrk` | Keytrack |
+| `mw` | Mod Wheel |
+| `pb` | Pitch Bend |
+| `rand_bi/0` | Random Bipolar (Uniform) |
+| `rand_uni/0` | Random Unipolar (Uniform) |
+| `macro_1` .. `macro_8` | Macros |
+
+Déconnecter : `surge_unmap_modulation(mod_source, target, instance)`
+
+**Limitations OSC connues** : arpégiateur, wavetable selection, et filter subtypes non exposés via OSC. À configurer manuellement dans l'UI Surge XT.
 
 **Patch selection by style**:
 

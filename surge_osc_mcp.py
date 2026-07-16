@@ -306,6 +306,73 @@ def surge_set_param(address: str, value: float, instance: int = 0) -> dict:
 
 
 @app.tool()
+def surge_map_modulation(
+    mod_source: str,
+    target: str,
+    depth: float,
+    instance: int = 0,
+) -> dict:
+    """Route a modulator to a target parameter.
+
+    mod_source examples (scene defaults to 'a' for vlfo/slfo/feg/aeg):
+      'a/vlfo_1/0'   Voice LFO 1 (index 0 = LFO out)
+      'a/vlfo_2/1'   Voice LFO 2 (index 1 = Raw Waveform)
+      'a/vlfo_3/0'   Voice LFO 3
+      'a/vlfo_4/0'   Voice LFO 4
+      'a/vlfo_5/0'   Voice LFO 5
+      'a/vlfo_6/0'   Voice LFO 6
+      'a/slfo_1/0'   Scene LFO 1
+      'a/feg'        Filter EG
+      'a/aeg'        Amp EG
+      'vel'          Velocity
+      'keytrk'       Keytrack
+      'mw'           Modulation Wheel
+      'pb'           Pitch Bend
+      'rand_bi/0'    Random Bipolar (Uniform)
+      'rand_uni/0'   Random Unipolar (Uniform)
+      'macro_1'..'macro_8'
+
+    target: target parameter address e.g. '/param/a/filter/1/cutoff'
+
+    depth: modulation depth (-1.0 to 1.0). Set to 0 to disconnect.
+    """
+    source_clean = mod_source.removeprefix("/").removeprefix("mod/")
+    address = f"/mod/{source_clean}"
+    osc_send(instance, address, target, depth)
+    osc_collect(instance, 0.1)
+    return {
+        "status": "ok",
+        "mod_source": mod_source,
+        "target": target,
+        "depth": depth,
+        "instance": instance,
+    }
+
+
+@app.tool()
+def surge_unmap_modulation(
+    mod_source: str,
+    target: str,
+    instance: int = 0,
+) -> dict:
+    """Disconnect a modulation routing (sets depth to 0).
+
+    Same mod_source and target format as surge_map_modulation.
+    """
+    source_clean = mod_source.removeprefix("/").removeprefix("mod/")
+    address = f"/mod/{source_clean}"
+    osc_send(instance, address, target, 0.0)
+    osc_collect(instance, 0.1)
+    return {
+        "status": "ok",
+        "action": "unmapped",
+        "mod_source": mod_source,
+        "target": target,
+        "instance": instance,
+    }
+
+
+@app.tool()
 def surge_get_param(address: str, instance: int = 0) -> dict:
     """Read a parameter value by OSC address from a Surge XT instance."""
     osc_send(instance, f"/q/{address.removeprefix('/')}")

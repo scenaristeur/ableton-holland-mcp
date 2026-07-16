@@ -515,3 +515,8 @@ python dashboard/app.py
 ## Licence
 
 MIT
+
+
+## other mcp 
+- https://github.com/hidingwill/AbletonBridge ,  https://www.youtube.com/watch?v=I2vggJXbhrs
+- 
