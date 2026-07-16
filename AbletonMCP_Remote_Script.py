@@ -1727,9 +1727,17 @@ class AbletonMCP(ControlSurface):
         ),
         ("packs", ("query:packs", "/packs/")),
         ("samples", ("query:samples", "sample:", "/samples/")),
-        ("drums", ("query:drums", "/drums/")),
-        ("instruments", ("query:instruments", "/instruments/")),
-        ("sounds", ("query:sounds", "/sounds/")),
+        ("drums", ("query:drums", "/drums/", "query:drums#")),
+        (
+            "instruments",
+            (
+                "query:instruments",
+                "/instruments/",
+                "query:synths#",
+                "query:instruments#",
+            ),
+        ),
+        ("sounds", ("query:sounds", "/sounds/", "query:sounds#")),
         ("audio_effects", ("query:audio effects", "audioeffects", "/audio_effects/")),
         ("midi_effects", ("query:midi effects", "midieffects", "/midi_effects/")),
     )

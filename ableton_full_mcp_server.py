@@ -1756,22 +1756,23 @@ if __name__ == "__main__":
     # Preload librosa modules — first call to chroma/beat/tempo triggers
     # numba compilation which can take 5-15s. Do it at startup so the first
     # capture doesn't time out.
-    # Wrapped in try/except so limited CPU/memory doesn't block server startup.
+    # Wrapped in try/except with warnings suppressed so limited CPU/memory
+    # doesn't block server startup or spam the console with benign warnings.
+    import warnings as _warnings
+
+    _warnings.filterwarnings("ignore", category=UserWarning, module="librosa")
+    _warnings.filterwarnings("ignore", category=FutureWarning, module="librosa")
     try:
         sr = 22050
-        dummy = np.zeros(sr * 1, dtype=np.float32)  # 1s of silence (was 3s)
-        _ = _L().feature.rms(y=dummy)[0]
-        _ = _L().feature.spectral_centroid(y=dummy, sr=sr)[0]
-        _ = _L().feature.zero_crossing_rate(dummy)[0]
-        _ = _L().feature.chroma_cqt(y=dummy, sr=sr, n_chroma=12)
-        _ = _L().beat.tempo(y=dummy, sr=sr)
-        _ = _L().feature.mfcc(y=dummy, sr=sr, n_mfcc=13)
-        _ = _L().onset.onset_strength(y=dummy, sr=sr)
+        dummy = np.zeros(sr * 1, dtype=np.float32)
+        _L().feature.rms(y=dummy)[0]
+        _L().feature.spectral_centroid(y=dummy, sr=sr)[0]
+        _L().feature.zero_crossing_rate(dummy)[0]
+        _L().feature.chroma_cqt(y=dummy, sr=sr, n_chroma=12)
+        _L().beat.tempo(y=dummy, sr=sr)
+        _L().feature.mfcc(y=dummy, sr=sr, n_mfcc=13)
+        _L().onset.onset_strength(y=dummy, sr=sr)
     except Exception:
-        import warnings
-
-        warnings.warn(
-            "librosa preload skipped (low resources) — first analysis call may be slow"
-        )
+        pass
 
     app.run(transport="stdio")
