@@ -252,6 +252,7 @@ class AbletonMCP(ControlSurface):
                 "create_audio_clip",
                 "add_notes_to_clip",
                 "set_clip_name",
+                "set_clip_loop",
                 "set_tempo",
                 "fire_clip",
                 "stop_clip",
@@ -4015,7 +4016,7 @@ class AbletonMCP(ControlSurface):
                 length = (end_bar - start_bar) * self._song.signature_numerator
             else:
                 length = length_beats
-            clip = track.create_clip(start_time, length)
+            clip = track.create_midi_clip(start_time, start_time + length)
             if name:
                 clip.name = str(name)
             return {
@@ -4044,7 +4045,9 @@ class AbletonMCP(ControlSurface):
                 from ableton.v2.audio_file import AudioFile
 
                 audio_file = AudioFile(path=file_path.encode("utf-8"))
-                clip = track.create_clip(start_time, audio_file.length)
+                clip = track.create_midi_clip(
+                    start_time, start_time + audio_file.length
+                )
                 clip.set_audio_file(audio_file)
                 return {
                     "track_index": track_index,
@@ -4052,7 +4055,7 @@ class AbletonMCP(ControlSurface):
                     "file_path": file_path,
                 }
             except ImportError:
-                clip = track.create_clip(start_time, 4.0)
+                clip = track.create_midi_clip(start_time, start_time + 4.0)
                 return {
                     "track_index": track_index,
                     "start_time": start_time,

@@ -520,3 +520,9 @@ MIT
 ## other mcp 
 - https://github.com/hidingwill/AbletonBridge ,  https://www.youtube.com/watch?v=I2vggJXbhrs
 - 
+
+## human voice
+- https://www.youtube.com/watch?v=odSc71wYU6I
+- https://www.youtube.com/watch?v=6F1BG5a5vxQ
+- https://www.reddit.com/r/synthesizers/comments/13y8iid/what_are_the_best_ways_to_recreate_the_human/
+- https://www.fullbucket.de/music/scrooo.html

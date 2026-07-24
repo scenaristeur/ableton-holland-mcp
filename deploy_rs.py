@@ -10,6 +10,9 @@ DSTS = [
 ]
 
 for dst in DSTS:
+    if not os.path.exists(os.path.dirname(dst)):
+        print(f"Skipped (not found): {dst}")
+        continue
     shutil.copy2(SRC, dst)
     print(f"Copied -> {dst}")
     pycache = os.path.join(os.path.dirname(dst), "__pycache__")

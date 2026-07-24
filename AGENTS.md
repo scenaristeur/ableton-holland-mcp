@@ -194,6 +194,8 @@ device_index 0 → devices[0]     → first device
 - Clip automation uses `insert_step(time, duration, value)` — the only write method in Live 12 Python API. `create_event()` requires a C++ struct (inaccessible). `control_coefficients` is read-only.
 - Connected steps pattern: `insert_step(t_i, t_{i+1}-t_i, v_i)` creates step automation (value holds from t_i to t_{i+1}). Each step creates 2 events at boundaries (end of previous + start of next).
 - Parameter targets: `"volume"`, `"panning"`, `"send_N"`, `"device_N_PARAMNAME"` (e.g. `device_1_Volume`)
+- `create_clip(track_index, clip_index, length)` — **length is in BEATS, not bars**. At 4/4: 1 bar = 4 beats. So 8 bars = 32, 16 bars = 64, etc. The loop defaults to the clip length.
+- **TODO**: add `set_clip_loop` command to Remote Script (set `clip.looping`, `clip.loop_start`, `clip.loop_end`)
 - "reload" command hot-reloads the RS via `importlib.reload()` + `self.__class__ = new_mod.AbletonMCP`
 - **IMPORTANT — Automation arrangement findings:**
   - `set_automation_curve(is_arrangement=False)` → écrit ET lit sur clips session (via `events_in_range`)
