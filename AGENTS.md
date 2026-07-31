@@ -11,55 +11,42 @@ Supporting files: `capture_audio.py` (standalone CLI capture), `dashboard/app.py
 
 **Single RS file:** `AbletonMCP_Remote_Script.py` is the source of truth. Deployed to `AbletonMCP/__init__.py` (and `AbletonMCPExtended/__init__.py`).
 
-**Plugin control reference:** See [`PLUGINS.md`](PLUGINS.md) for detailed capabilities of each plugin type (native synths, external VSTs, Surge XT via OSC) and how to control them.
+**Plugin control reference:** See [`PLUGINS.md`](PLUGINS.md) for detailed capabilities of each plugin type.
 
 ## Development Workflow
 
 | Command | Description |
 |---|---|
-| `python deploy_rs.py` | Copy RS + reload (no restart) |
-| `cp ...` then `reload` cmd | Manual deploy + hot-reload |
-
-### Deploy without restart
-1. Edit `AbletonMCP_Remote_Script.py`
-2. Run `python deploy_rs.py` (copies to both RS dirs, clears cache, sends `reload` command)
-3. Changes apply immediately — no Ableton restart needed
-
-### Testing MCP server changes (no RS change)
-
-When modifying only `ableton_full_mcp_server.py` (adding/editing tool wrappers that call existing RS commands):
-
-1. Stop the running MCP server (Ctrl+C)
-2. Restart it: `.venv/Scripts/python ableton_full_mcp_server.py`
-3. Test via any MCP client — the new tools appear automatically in the tool list
-4. No Ableton restart or RS deploy needed
-
-When modifying both the RS and the server:
-1. First run `python deploy_rs.py` (RS changes take effect immediately)
-2. Then restart the MCP server
-
-## Setup & Commands
-
-| Command | Description |
-|---|---|---|
 | `.venv/Scripts/python -m pip install -r requirements.txt` | Install dependencies |
 | `.venv/Scripts/python ableton_full_mcp_server.py` | Start Ableton MCP server |
 | `.venv/Scripts/python surge_osc_mcp.py` | Start Surge XT OSC server |
 | `.venv/Scripts/python capture_audio.py --help` | Standalone audio capture CLI |
-| `python deploy_rs.py` | Deploy RS + hot-reload without restart |
+| `python deploy_rs.py` | Copy RS + hot-reload without restart |
 
-**Linting:** Ruff has been run manually before (`.ruff_cache/` exists) but no config file. Run with:
+### Deploy RS without restart
+1. Edit `AbletonMCP_Remote_Script.py`
+2. Run `python deploy_rs.py` (copies to both RS dirs, clears cache, sends `reload` command)
+3. No Ableton restart needed
+
+### Test MCP server changes (no RS change)
+1. Stop server (Ctrl+C) → restart: `.venv/Scripts/python ableton_full_mcp_server.py`
+2. Test via any MCP client — new tools appear automatically
+
+### When modifying both RS and server
+1. Run `python deploy_rs.py` first
+2. Then restart MCP server
+
+**Linting:** Ruff (no config file, `.ruff_cache/` exists). Run:
 ```
 ruff check .
 ruff format .
 ```
-No test framework is set up. No `tests/` directory exists. No CI, no pre-commit, no `pyproject.toml`.
+No test framework, no `tests/` directory, no CI, no pre-commit, no `pyproject.toml`.
 
 ## Code Style Guidelines
 
 ### Imports
-
-Order: (1) `from __future__ import annotations`, (2) standard library, (3) third-party, (4) local. Group by category with blank lines between:
+Order: (1) `from __future__ import annotations`, (2) standard library, (3) third-party, (4) local. Group by category with blank lines:
 
 ```python
 from __future__ import annotations
@@ -78,35 +65,23 @@ from fastmcp import FastMCP
 ```
 
 ### Formatting
-
 - 4-space indentation, no tabs
 - Two blank lines before top-level functions/classes, one between class methods
-- Line length: not strictly enforced, but keep under 100 chars where readable
+- Line length: under 100 chars where readable
 - Trailing commas in multi-line function calls and collections
 - Use f-strings over `.format()` or `%`
 
 ### ASCII Art Section Headers
-
-Separate major sections with commented header lines:
-
 ```python
 # ── Session / Transport ─────────────────────────────────────────────────────
 ```
-
 Use `#` comments (not `"""docstrings"""`) for internal section dividers.
 
 ### Types
-
-- Always use `from __future__ import annotations` at top of file
-- Use Python 3.10+ syntax: `X | None`, `dict[str, Any]`, `list[dict[str, Any]]`
+- Always use `from __future__ import annotations`
+- Python 3.10+ syntax: `X | None`, `dict[str, Any]`, `list[dict[str, Any]]`
 - Import `Any` from `typing` for dynamic types
-- Type hints on all function signatures (parameters and return types)
-
-```python
-def _send_command(
-    cmd_type: str, params: dict[str, Any] | None = None, timeout: float = TIMEOUT
-) -> dict[str, Any]:
-```
+- Type hints on ALL function signatures (parameters and return types)
 
 ### Naming Conventions
 
@@ -121,33 +96,20 @@ def _send_command(
 | Variables | `snake_case` | `track_index`, `wav_path`, `recorded` |
 
 ### Error Handling
-
-- **`try/finally`** to guarantee resource cleanup (especially sockets):
-  ```python
-  sock = socket.socket(...)
-  try:
-      sock.connect(...)
-      ...
-  finally:
-      sock.close()
-  ```
-- **`ValueError`** for invalid parameters: `raise ValueError(f"Instance must be 0..{MAX_INSTANCES - 1}")`
-- **`RuntimeError`** for operational failures: `raise RuntimeError("CABLE Output not found...")`
-- **Best-effort init** with silent `try/except Exception: pass` for non-critical setup
+- **`try/finally`** for resource cleanup (especially sockets)
+- **`ValueError`** for invalid parameters
+- **`RuntimeError`** for operational failures
+- Best-effort init: silent `try/except Exception: pass` for non-critical setup
 - Remote Script errors: parse `{"status": "error", "message": "..."}` response and `raise RuntimeError`
 - Use `warnings.warn()` (not `print`) for non-fatal conditions inside callbacks
 
 ### Docstrings
-
-- Module-level: triple-quoted string immediately after shebang line, describing the file
-- Tool functions (`@app.tool()`): always have a descriptive docstring (becomes the MCP tool description)
-- Helper functions: Google-style or plain descriptive sentences. Args/Returns sections optional.
+- Module-level: triple-quoted string after shebang, describing the file
+- Tool functions (`@app.tool()`): always have a descriptive docstring (becomes MCP tool description)
+- Helper functions: Google-style or plain descriptive. Args/Returns sections optional.
 - **No inline comments** unless explaining a non-obvious design decision
 
 ### MCP Tool Pattern
-
-MCP tools use the `fastmcp` library (`FastMCP` class):
-
 ```python
 app = FastMCP("server-name")
 
@@ -158,63 +120,43 @@ def my_tool(param1: str, param2: int = 0) -> dict:
     return {"key": "value"}
 ```
 
-### Instrument Workflow
-
-Lors de la création d'un morceau, privilégier dans cet ordre :
-1. Drum Kit ou kit natif Ableton (browser > drums) pour les percussions
-2. Synthés natifs Ableton (Wavetable, Analog, Drift, Operator) pour basses, nappes, leads
-3. Packs Core Library (Piano & Keys, Strings, etc.) pour instruments acoustiques
-4. Surge XT uniquement si un son spécifique est introuvable dans les natifs
-
-Browser items (URI) se chargent avec `load_instrument_or_effect`:
-- Synthés : `query:Synths#Wavetable`, `query:Synths#Analog`, `query:Synths#Drift`, `query:Synths#Operator`
-- Drums :  `query:Drums#FileId_XXXX` (preset kit), `query:Drums#Drum%20Rack` (device)
-- Sounds : `query:Sounds#Piano%20&%20Keys`, `query:Sounds#Strings`, `query:Sounds#Pad`, etc.
-- Plugins externes : `plugins/VST3/Surge Synth Team/Surge XT`
-
-### Indexing Convention (CRITICAL)
-
+## Indexing Convention (CRITICAL)
 **ALL track and clip indices are 0-based** — matching Live's Python API (`song.tracks[0]` = first track after Master). This applies to every tool parameter named `track_index`, `clip_index`, `device_index`, `chain_index`, `scene_index`, `send_index`.
 
 ```
 track_index 0 → song.tracks[0] → first session track
-track_index 1 → song.tracks[1] → second session track
 clip_index 0   → clip_slots[0]  → first clip slot
 device_index 0 → devices[0]     → first device
 ```
 
-### Architecture Notes
-
-- `ableton_full_mcp_server.py` communicates with Ableton via TCP to `AbletonMCP_Remote_Script.py` on port 9877
+## Architecture Notes
+- Server communicates with Ableton via TCP on port 9877 to `AbletonMCP_Remote_Script.py`
 - `_send_command()` sends JSON `{"type": "...", "params": {...}}` and returns parsed response
-- Audio capture uses VB-Cable (Voicemeeter virtual audio cable) via `sounddevice.InputStream`
-- Analysis functions load audio from WAV → CSV (`.npy` not used), run through librosa
-- The Remote Script (`AbletonMCP_Remote_Script.py`) is Python 2/3 compatible with `try: import Queue` compat shims
-- Surge OSC uses `python-osc` with `ThreadingOSCUDPServer` listening on ports 53281+ (stride=2)
-- Clip automation uses `insert_step(time, duration, value)` — the only write method in Live 12 Python API. `create_event()` requires a C++ struct (inaccessible). `control_coefficients` is read-only.
-- Connected steps pattern: `insert_step(t_i, t_{i+1}-t_i, v_i)` creates step automation (value holds from t_i to t_{i+1}). Each step creates 2 events at boundaries (end of previous + start of next).
-- Parameter targets: `"volume"`, `"panning"`, `"send_N"`, `"device_N_PARAMNAME"` (e.g. `device_1_Volume`)
-- `create_clip(track_index, clip_index, length)` — **length is in BEATS, not bars**. At 4/4: 1 bar = 4 beats. So 8 bars = 32, 16 bars = 64, etc. The loop defaults to the clip length.
-- **TODO**: add `set_clip_loop` command to Remote Script (set `clip.looping`, `clip.loop_start`, `clip.loop_end`)
-- "reload" command hot-reloads the RS via `importlib.reload()` + `self.__class__ = new_mod.AbletonMCP`
-- **IMPORTANT — Automation arrangement findings:**
-  - `set_automation_curve(is_arrangement=False)` → écrit ET lit sur clips session (via `events_in_range`)
-  - `duplicate_clip_to_arrangement` → copie les enveloppes dans l'arrangement (UI visible, MAIS API illisible)
-  - `automation_envelope(param)` sur clip MIDI arrangement → retourne `None` (API bug, enveloppe existe)
-  - `create_automation_envelope(param)` sur clip MIDI arrangement → exception (Live 12 Lite limitation)
-  - Les enveloppes d'arrangement sont **write-once** : écriture OK via workflow session→duplicate, mais lecture/modification impossible depuis Python
+- Audio capture uses VB-Cable (Voicemeeter) via `sounddevice.InputStream`
+- Analysis uses librosa; data saved as WAV → CSV (`.npy` not used)
+- RS is Python 2/3 compatible with `try: import Queue` compat shims
+- Surge OSC uses `python-osc` with `ThreadingOSCUDPServer` on ports 53281+ (stride=2)
+- `create_clip(track, clip, length)` — **length is in BEATS, not bars**. 4/4: 1 bar = 4 beats
+- "reload" command hot-reloads the RS via `importlib.reload()`
+- Clip automation: use `insert_step(time, duration, value)`. Do NOT use `create_event()` (needs C++ struct)
+- `control_coefficients` is read-only
+- Automation envelopes on arrangement clips are **write-once**: session→duplicate workflow works, but reading/modifying arrangement envelopes from Python is unreliable
 
-### What NOT To Do
+## Troubleshooting — Silent Audio Capture
+**Symptom:** `capture_and_analyze` returns silence (rms ≈ 0, values {−1, 0, +1}).
 
+**Cause:** `CABLE_DEVICE_ID` is a frozen index from `sd.query_devices()` at startup. If Windows audio devices change, the index points to a wrong/silent device.
+
+**Fix:** Restart the MCP server: Ctrl+C → `.venv/Scripts/python ableton_full_mcp_server.py`. The server redetects `CABLE Output` on restart.
+
+## What NOT To Do
 - Do NOT create new files when editing an existing one suffices
 - Do NOT add inline comments explaining obvious code
 - Do NOT add emojis to source files or documentation
-- Do NOT run multiple audio captures in parallel (they block the server)
+- Do NOT run multiple `capture_and_analyze` calls at once — send one, wait for response
 - Do NOT run multiple `load_instrument_or_effect` calls in parallel
 - Do NOT modify `AbletonMCP_Remote_Script.py` without understanding Python 2/3 dual compatibility
-- Do NOT guess file paths or module names — verify with the actual imports in the codebase
-- Do NOT use `create_event()` — it doesn't work in Live 12 (needs C++ struct `TEnvelopeEvent`)
-- Do NOT try to set `control_coefficients` — it's read-only
-- Do NOT run `deploy_rs.py` if Ableton isn't running (reload will timeout — still safe, just restart)
-- Do NOT use `create_event()` — it doesn't work in Live 12 (needs C++ struct `TEnvelopeEvent`)
-- Do NOT try to set `control_coefficients` — it's read-only
+- Do NOT guess file paths or module names — verify imports in the actual codebase
+- Do NOT use `create_event()` — it requires a C++ struct `TEnvelopeEvent` (inaccessible)
+- Do NOT set `control_coefficients` — it's read-only
+- Do NOT run `deploy_rs.py` if Ableton isn't running (safe, but reload will timeout)

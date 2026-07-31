@@ -43,7 +43,8 @@ External VST/AU plugins (Analog Lab V, etc.) are loaded via the Remote Script bu
 |---|---|---|
 | Load native synth | `query:Synths#<Name>` | `query:Synths#Wavetable` |
 | Load sound preset | `query:Sounds#<Category>:FileId_XXXX` | `query:Sounds#Bass:FileId_14913` |
-| Load drum kit | `query:Drums#<Name>` | `query:Drums#Drum%20Rack` |
+| Load drum kit | `query:Drums#FileId_XXXX` | `query:Drums#FileId_5419` (Gen Purpose Kit) |
+| Find drum kit FileId | `get_browser_item(path="drums/<Nom>.adg")` | `get_browser_item(path="drums/Gen Purpose Kit.adg")` → `item.uri` |
 | Load external VST | plugins path | `plugins/VST3/Arturia/Analog Lab V` |
 | Browser tree | `get_browser_tree(category_type)` | `"instruments"`, `"sounds"`, `"drums"` |
 | Browse path | `get_browser_items_at_path(path)` | `"Sounds/Bass"` |
@@ -52,6 +53,8 @@ External VST/AU plugins (Analog Lab V, etc.) are loaded via the Remote Script bu
 - Wavetable, Analog, Drift, Operator, Collision, Electric, Tension
 - Simpler, Sampler, Impulse, Drum Rack, Instrument Rack
 - Drum Sampler
+
+**Note on drum kits:** Les `.adg` du Core Library (`Racks/Drum Racks/`) se chargent via `query:Drums#FileId_XXXX` comme `InstrumentGroupDevice` (rack pré-rempli, joue GM). Le `Drum Rack` device (`query:Drums#Drum%20Rack`) est un `DrumGroupDevice` vide — utile seulement si on veut build un rack pad par pad.
 
 **Available sound categories** (via `query:Sounds#<Category>`):
 - Bass, Synth Lead, Synth Keys, Pad, Piano & Keys, Strings, Brass

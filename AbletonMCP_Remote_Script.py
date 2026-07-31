@@ -277,6 +277,7 @@ class AbletonMCP(ControlSurface):
                 # Scenes
                 "create_scene",
                 "fire_scene",
+                "set_scene_name",
                 # Mixer
                 "set_send",
                 "set_monitoring",
@@ -473,6 +474,10 @@ class AbletonMCP(ControlSurface):
                         elif command_type == "fire_scene":
                             index = params.get("index", 0)
                             result = self._fire_scene(index)
+                        elif command_type == "set_scene_name":
+                            index = params.get("index", 0)
+                            name = params.get("name", "")
+                            result = self._set_scene_name(index, name)
                         # ── Mixer ──────────────────────────────────────────────────
                         elif command_type == "set_send":
                             track_index = params.get("track_index", 0)
@@ -844,7 +849,11 @@ class AbletonMCP(ControlSurface):
                 # create_audio_clip, which decodes/imports the audio file on
                 # the main thread) can take longer than the default 10s on
                 # larger files — give them more headroom.
-                long_running_commands = {"create_audio_clip": 60.0}
+                long_running_commands = {
+                    "create_audio_clip": 60.0,
+                    "load_instrument_or_effect": 120.0,
+                    "load_browser_item": 120.0,
+                }
                 queue_timeout = long_running_commands.get(command_type, 10.0)
                 try:
                     task_response = response_queue.get(timeout=queue_timeout)
@@ -883,11 +892,11 @@ class AbletonMCP(ControlSurface):
                 response["result"] = self._get_browser_item(uri, path)
             elif command_type == "get_browser_categories":
                 category_type = params.get("category_type", "all")
-                response["result"] = self._get_browser_categories(category_type)
+                response["result"] = self.get_browser_tree(category_type)
             elif command_type == "get_browser_items":
                 path = params.get("path", "")
                 item_type = params.get("item_type", "all")
-                response["result"] = self._get_browser_items(path, item_type)
+                response["result"] = self.get_browser_items_at_path(path)
             # Add the new browser commands
             elif command_type == "get_browser_tree":
                 category_type = params.get("category_type", "all")
