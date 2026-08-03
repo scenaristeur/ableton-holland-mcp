@@ -137,6 +137,7 @@ device_index 0 → devices[0]     → first device
 - RS is Python 2/3 compatible with `try: import Queue` compat shims
 - Surge OSC uses `python-osc` with `ThreadingOSCUDPServer` on ports 53281+ (stride=2)
 - `create_clip(track, clip, length)` — **length is in BEATS, not bars**. 4/4: 1 bar = 4 beats
+- **`duplicate_clip_to_arrangement` bar param is OFF BY ONE** — `destination_bar=N` places the clip at `(N-1)*4` beats (1-based bar). `destination_bar=4` lands on beat 12 (bar 3), not bar 4 → overlaps the preceding clip. **Workaround: always use `duplicate_to_arrangement(track, clip, destination_time)` with `destination_time` in beats (0-based, exact).**
 - "reload" command hot-reloads the RS via `importlib.reload()`
 - Clip automation: use `insert_step(time, duration, value)`. Do NOT use `create_event()` (needs C++ struct)
 - `control_coefficients` is read-only
