@@ -1412,6 +1412,55 @@ def set_master_panning(value: float) -> dict[str, Any]:
     return _cmd("set_master_panning", value=value)
 
 
+# ── Return tracks ──────────────────────────────────────────────────────────
+
+
+@app.tool()
+def get_return_tracks() -> dict[str, Any]:
+    """Get return tracks info: name, volume, pan, mute, devices."""
+    return _cmd("get_return_tracks")
+
+
+@app.tool()
+def get_return_track_device_parameters(
+    return_index: int, device_index: int
+) -> dict[str, Any]:
+    """Read all parameters of a device on a return track."""
+    return _cmd(
+        "get_return_track_device_parameters",
+        return_index=return_index,
+        device_index=device_index,
+    )
+
+
+@app.tool()
+def set_return_track_device_parameter(
+    return_index: int, device_index: int, parameter_name: str, value: float
+) -> dict[str, Any]:
+    """Set a device parameter value on a return track."""
+    return _cmd(
+        "set_return_track_device_parameter",
+        return_index=return_index,
+        device_index=device_index,
+        parameter_name=parameter_name,
+        value=value,
+    )
+
+
+@app.tool()
+def set_return_track_volume(return_index: int, value: float) -> dict[str, Any]:
+    """Set return track volume (0.0–1.0)."""
+    return _cmd("set_return_track_volume", return_index=return_index, value=value)
+
+
+@app.tool()
+def load_instrument_or_effect_on_return_track(
+    return_index: int, uri: str
+) -> dict[str, Any]:
+    """Load an effect onto a return track by URI (e.g. Reverb, Delay)."""
+    return _cmd("load_browser_item_on_return_track", return_index=return_index, uri=uri)
+
+
 # ── Crossfader ───────────────────────────────────────────────────────────
 
 

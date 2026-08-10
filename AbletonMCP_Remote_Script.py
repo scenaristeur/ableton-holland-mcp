@@ -312,6 +312,10 @@ class AbletonMCP(ControlSurface):
                 "set_master_panning",
                 "set_master_device_parameter",
                 "load_browser_item_on_master",
+                # Return tracks
+                "set_return_track_device_parameter",
+                "set_return_track_volume",
+                "load_browser_item_on_return_track",
                 # Clip envelopes (modulation)
                 "get_clip_envelope",
                 "set_clip_envelope",
@@ -587,6 +591,24 @@ class AbletonMCP(ControlSurface):
                         elif command_type == "load_browser_item_on_master":
                             item_uri = params.get("uri", "")
                             result = self._load_browser_item_on_master(item_uri)
+                        elif command_type == "set_return_track_device_parameter":
+                            return_index = params.get("return_index", 0)
+                            device_index = params.get("device_index", 0)
+                            parameter_name = params.get("parameter_name", "")
+                            value = params.get("value", 0.0)
+                            result = self._set_return_track_device_parameter(
+                                return_index, device_index, parameter_name, value
+                            )
+                        elif command_type == "set_return_track_volume":
+                            return_index = params.get("return_index", 0)
+                            value = params.get("value", 0.85)
+                            result = self._set_return_track_volume(return_index, value)
+                        elif command_type == "load_browser_item_on_return_track":
+                            return_index = params.get("return_index", 0)
+                            item_uri = params.get("uri", "")
+                            result = self._load_browser_item_on_return_track(
+                                return_index, item_uri
+                            )
                         elif command_type == "set_track_volume":
                             track_index = params.get("track_index", 0)
                             value = params.get("value", 0.85)
@@ -943,6 +965,15 @@ class AbletonMCP(ControlSurface):
             elif command_type == "get_master_device_parameters":
                 device_index = params.get("device_index", 0)
                 response["result"] = self._get_master_device_parameters(device_index)
+            # ── Return tracks ────────────────────────────────────────────────────
+            elif command_type == "get_return_tracks":
+                response["result"] = self._get_return_tracks()
+            elif command_type == "get_return_track_device_parameters":
+                return_index = params.get("return_index", 0)
+                device_index = params.get("device_index", 0)
+                response["result"] = self._get_return_track_device_parameters(
+                    return_index, device_index
+                )
             # ── Extended read-only commands ──────────────────────────────────────
             elif command_type == "get_chain_info":
                 track_index = params.get("track_index", 0)
@@ -3160,6 +3191,142 @@ class AbletonMCP(ControlSurface):
             self.log_message("Error setting master panning: " + str(e))
             raise
 
+    # ═══════════════════════════════════════════════════════════════
+    # Return tracks
+    # ═══════════════════════════════════════════════════════════════
+
+    def _resolve_return_track(self, return_index):
+        """Get a return track by index with bounds checking."""
+        if return_index < 0 or return_index >= len(self._song.return_tracks):
+            raise IndexError("Return track index out of range")
+        return self._song.return_tracks[return_index]
+
+    def _get_return_tracks(self):
+        """List return tracks: name, volume, pan, mute, devices"""
+        try:
+            returns = []
+            for return_index, track in enumerate(self._song.return_tracks):
+                devices = []
+                for device_index, device in enumerate(track.devices):
+                    devices.append(
+                        {
+                            "index": device_index,
+                            "name": device.name,
+                            "class_name": device.class_name,
+                            "type": self._get_device_type(device),
+                        }
+                    )
+                returns.append(
+                    {
+                        "index": return_index,
+                        "name": track.name,
+                        "volume": track.mixer_device.volume.value,
+                        "panning": track.mixer_device.panning.value,
+                        "mute": track.mute if hasattr(track, "mute") else False,
+                        "devices": devices,
+                    }
+                )
+            return {"return_tracks": returns}
+        except Exception as e:
+            self.log_message("Error getting return tracks: " + str(e))
+            raise
+
+    def _get_return_track_device_parameters(self, return_index, device_index):
+        """Read all parameters of a device on a return track"""
+        try:
+            track = self._resolve_return_track(return_index)
+            if device_index < 0 or device_index >= len(track.devices):
+                raise IndexError("Return track device index out of range")
+            device = track.devices[device_index]
+            parameters = []
+            for param in device.parameters:
+                p = {
+                    "name": param.name,
+                    "value": param.value,
+                    "min": param.min,
+                    "max": param.max,
+                    "is_quantized": param.is_quantized,
+                }
+                if param.is_quantized and hasattr(param, "value_items"):
+                    try:
+                        p["value_items"] = list(param.value_items)
+                    except Exception:
+                        p["value_items"] = None
+                else:
+                    p["value_items"] = None
+                parameters.append(p)
+            return {
+                "return_index": return_index,
+                "device_name": device.name,
+                "device_class": device.class_name,
+                "parameters": parameters,
+            }
+        except Exception as e:
+            self.log_message("Error getting return track device parameters: " + str(e))
+            raise
+
+    def _set_return_track_device_parameter(
+        self, return_index, device_index, parameter_name, value
+    ):
+        """Set a device parameter value on a return track"""
+        try:
+            track = self._resolve_return_track(return_index)
+            if device_index < 0 or device_index >= len(track.devices):
+                raise IndexError("Return track device index out of range")
+            device = track.devices[device_index]
+            for param in device.parameters:
+                if (
+                    param.name == parameter_name
+                    and hasattr(param, "value")
+                    and not getattr(param, "is_enabled", False) == False
+                ):
+                    if param.is_quantized:
+                        param.value = int(round(value))
+                    else:
+                        param.value = float(value)
+                    return {"name": param.name, "value": param.value}
+            raise ValueError(
+                "Parameter '{0}' not found or is read-only".format(parameter_name)
+            )
+        except Exception as e:
+            self.log_message("Error setting return track device parameter: " + str(e))
+            raise
+
+    def _load_browser_item_on_return_track(self, return_index, item_uri):
+        """Load a browser item onto a return track by its URI"""
+        try:
+            track = self._resolve_return_track(return_index)
+            app = self.application()
+            item = self._find_browser_item_by_uri(app.browser, item_uri)
+            if not item:
+                raise ValueError(
+                    "Browser item with URI '{0}' not found".format(item_uri)
+                )
+            self._song.view.selected_track = track
+            app.browser.load_item(item)
+            return {
+                "loaded": True,
+                "return_index": return_index,
+                "item_name": item.name,
+                "uri": item_uri,
+            }
+        except Exception as e:
+            self.log_message(
+                "Error loading browser item on return track: {0}".format(str(e))
+            )
+            self.log_message(traceback.format_exc())
+            raise
+
+    def _set_return_track_volume(self, return_index, value):
+        """Set return track volume (0.0–1.0)"""
+        try:
+            track = self._resolve_return_track(return_index)
+            track.mixer_device.volume.value = float(value)
+            return {"return_index": return_index, "volume": float(value)}
+        except Exception as e:
+            self.log_message("Error setting return track volume: " + str(e))
+            raise
+
     def _set_track_volume(self, track_index, value):
         """Set a track's volume (0.0–1.0)"""
         try:
@@ -3749,7 +3916,7 @@ class AbletonMCP(ControlSurface):
                                 {
                                     "name": d.name,
                                     "class_name": d.class_name,
-                                    "is_enabled": d.is_enabled,
+                                    "is_enabled": getattr(d, "is_enabled", True),
                                 }
                             )
                         result["chain_devices"] = devices

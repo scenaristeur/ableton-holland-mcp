@@ -72,6 +72,17 @@ External VST/AU plugins (Analog Lab V, etc.) are loaded via the Remote Script bu
 
 **Important limitation:** External VSTs like Analog Lab V expose only a limited subset of their internal parameters to Ableton's Python API. You can see what's available with `get_device_parameters(track_index, device_index)`. Most parameters (oscillator controls, filter, effects inside the VST) are **NOT accessible** via the Remote Script.
 
+**Surge XT — Emplacement dans le browser (CRITIQUE) :**
+
+| Niveau | Élément | URI |
+|---|---|---|
+| Browser → `plugins` | Vendor **« Surge Synth Team »** | `query:Plugins#VST3:Surge%20Synth%20Team` |
+| Enfant du vendor | **Surge XT** (VST3) | `query:Plugins#VST3:Surge%20Synth%20Team:Surge%20XT` |
+
+Charger avec `load_instrument_or_effect(track_index, "query:Plugins#VST3:Surge%20Synth%20Team:Surge%20XT")`.
+`load_external_plugin()` est **buggé** (crash `'dict' object has no attribute 'lower'` dans `list_external_plugins`) → toujours passer par l'URI ci-dessus.
+Contrôle total via **OSC** (`surge_osc_mcp.py`, spec dans `doc_surge/surge_OSC.md`).
+
 ### External VST Parameter Exposure (tested 2026-07-08)
 
 Résultat des tests de paramètres exposés par chaque VST via `get_device_parameters()`. Chargez un instrument + effets sur la même track. Supprimez les devices après test pour économiser CPU/mémoire.
@@ -132,7 +143,7 @@ Résultat des tests de paramètres exposés par chaque VST via `get_device_param
 
 ### 2. Surge XT via OSC (`surge_osc_mcp.py`)
 
-**Full reference:** `docs/surge_OSC.html`
+**Full reference:** `doc_surge/surge_OSC.md`
 
 | OSC Address | Description | Values |
 |---|---|---|
@@ -282,6 +293,7 @@ Résultat des tests de paramètres exposés par chaque VST via `get_device_param
    - Sound preset          → load_instrument_or_effect(track_index, "query:Sounds#Bass:FileId_XXXX")
    - Drum kit              → load_drum_kit(track_index, rack_uri, kit_path)
    - External VST          → load_external_plugin(track_index, "Plugin Name")
+   - Surge XT (VST3)        → load_instrument_or_effect(track_index, "query:Plugins#VST3:Surge%20Synth%20Team:Surge%20XT")
 4. Configure:
    - Native device params  → set_device_parameter(track_index, device_index, name, value)
    - Surge XT via OSC      → surge_set_param(0, "/param/a/osc/1/cutoff", 0.7)
