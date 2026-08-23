@@ -949,6 +949,11 @@ class AbletonMCP(ControlSurface):
             # ── System / Monitoring ────────────────────────────────────────────
             elif command_type == "get_cpu_load":
                 response["result"] = self._get_cpu_load()
+            elif command_type == "get_cpu_report":
+                response["result"] = self._get_cpu_report()
+            elif command_type == "get_track_diagnostics":
+                track_index = params.get("track_index", 0)
+                response["result"] = self._get_track_diagnostics(track_index)
             elif command_type == "get_live_version":
                 response["result"] = self._get_live_version()
             elif command_type == "get_tempo_follower":
@@ -986,6 +991,32 @@ class AbletonMCP(ControlSurface):
                 track_index = params.get("track_index", 0)
                 device_index = params.get("device_index", 1)
                 response["result"] = self._get_drum_pad_info(track_index, device_index)
+            elif command_type == "get_drum_pad_parameters":
+                track_index = params.get("track_index", 0)
+                device_index = params.get("device_index", 1)
+                note = params.get("note", 0)
+                chain_index = params.get("chain_index", 0)
+                sub_device = params.get("device_index_in_chain", 0)
+                response["result"] = self._get_drum_pad_parameters(
+                    track_index, device_index, note, chain_index, sub_device
+                )
+            elif command_type == "set_drum_pad_parameter":
+                track_index = params.get("track_index", 0)
+                device_index = params.get("device_index", 1)
+                note = params.get("note", 0)
+                chain_index = params.get("chain_index", 0)
+                sub_device = params.get("device_index_in_chain", 0)
+                parameter_name = params.get("parameter_name", "")
+                value = params.get("value", 0.0)
+                response["result"] = self._set_drum_pad_parameter(
+                    track_index,
+                    device_index,
+                    note,
+                    chain_index,
+                    sub_device,
+                    parameter_name,
+                    value,
+                )
             elif command_type == "get_cue_points":
                 response["result"] = self._get_cue_points()
             elif command_type == "get_track_volume":
@@ -2905,15 +2936,151 @@ class AbletonMCP(ControlSurface):
     # ═══════════════════════════════════════════════════════════════
 
     def _get_cpu_load(self):
-        """Get CPU usage: average and peak"""
+        """Get CPU usage: average and peak, plus total process RAM (MB)."""
         try:
             app = self.application()
+            mem = self._get_process_memory_mb()
             return {
                 "average_percent": app.average_process_usage,
                 "peak_percent": app.peak_process_usage,
+                "memory_mb": round(mem, 1) if mem is not None else None,
             }
         except Exception as e:
             self.log_message("Error getting CPU load: " + str(e))
+            raise
+
+    def _get_process_memory_mb(self):
+        """Best-effort process memory in MB (track.usage_bytes aggregates per track)."""
+        try:
+            from ctypes import (
+                POINTER,
+                Structure,
+                c_ulong,
+                byref,
+                sizeof,
+                windll,
+            )
+
+            class PROCESS_MEMORY_COUNTERS(Structure):
+                _fields_ = [
+                    ("cb", c_ulong),
+                    ("PageFaultCount", c_ulong),
+                    ("PeakWorkingSetSize", c_ulong),
+                    ("WorkingSetSize", c_ulong),
+                    ("QuotaPeakPagedPoolUsage", c_ulong),
+                    ("QuotaPagedPoolUsage", c_ulong),
+                    ("QuotaPeakNonPagedPoolUsage", c_ulong),
+                    ("QuotaNonPagedPoolUsage", c_ulong),
+                    ("PagefileUsage", c_ulong),
+                    ("PeakPagefileUsage", c_ulong),
+                ]
+
+            import os
+
+            pid = os.getpid()
+            process = windll.kernel32.OpenProcess(
+                0x0410, False, pid
+            )  # QUERY_INFORMATION | VM_READ
+            if not process:
+                return None
+            try:
+                counters = PROCESS_MEMORY_COUNTERS()
+                counters.cb = sizeof(PROCESS_MEMORY_COUNTERS)
+                windll.psapi.GetProcessMemoryInfo(process, byref(counters), counters.cb)
+                return counters.WorkingSetSize / (1024.0 * 1024.0)
+            finally:
+                windll.kernel32.CloseHandle(process)
+        except Exception:
+            try:
+                import resource
+
+                return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
+            except Exception:
+                return None
+
+    def _get_device_on(self, device):
+        """Best-effort read of a device's On/Off state via its 'Device On' parameter."""
+        try:
+            for p in device.parameters:
+                name = getattr(p, "name", "") or ""
+                if name == "Device On":
+                    return float(p.value)
+        except Exception:
+            pass
+        return None
+
+    def _get_track_ram_bytes(self, track):
+        """Best-effort read of a track's RAM usage in bytes (Live API)."""
+        try:
+            if hasattr(track, "usage_bytes"):
+                return track.usage_bytes
+        except Exception:
+            pass
+        return None
+
+    def _bytes_to_mb(self, value_bytes, digits=2):
+        """Convert bytes to MB, or None if value is missing."""
+        if value_bytes is None:
+            return None
+        return round(value_bytes / (1024.0 * 1024.0), digits)
+
+    def _get_track_diagnostics(self, track_index):
+        """Per-track CPU/RAM diagnostics incl. device states (best-effort)."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+
+            devices = []
+            for device_index, device in enumerate(track.devices):
+                devices.append(
+                    {
+                        "index": device_index,
+                        "name": device.name,
+                        "class_name": device.class_name,
+                        "type": self._get_device_type(device),
+                        "device_on": self._get_device_on(device),
+                        "is_plugin": device.class_name == "PluginDevice",
+                        "is_rack": getattr(device, "can_have_chains", False),
+                    }
+                )
+
+            return {
+                "index": track_index,
+                "name": track.name,
+                "is_audio_track": track.has_audio_input,
+                "is_midi_track": track.has_midi_input,
+                "mute": track.mute,
+                "solo": track.solo,
+                "arm": track.arm,
+                "is_frozen": getattr(track, "is_frozen", None),
+                "ram_bytes": self._get_track_ram_bytes(track),
+                "ram_mb": self._bytes_to_mb(self._get_track_ram_bytes(track), 2),
+                "devices": devices,
+            }
+        except Exception as e:
+            self.log_message("Error getting track diagnostics: " + str(e))
+            raise
+
+    def _get_cpu_report(self):
+        """Global CPU + RAM and per-track diagnostics for all session tracks."""
+        try:
+            app = self.application()
+            tracks = []
+            for i, _track in enumerate(self._song.tracks):
+                tracks.append(self._get_track_diagnostics(i))
+            mem = self._get_process_memory_mb()
+            return {
+                "global": {
+                    "average_percent": app.average_process_usage,
+                    "peak_percent": app.peak_process_usage,
+                    "memory_mb": round(mem, 1) if mem is not None else None,
+                },
+                "track_count": len(self._song.tracks),
+                "tracks": tracks,
+            }
+        except Exception as e:
+            self.log_message("Error getting CPU report: " + str(e))
             raise
 
     def _get_live_version(self):
@@ -3855,13 +4022,36 @@ class AbletonMCP(ControlSurface):
                 return chain, chain.devices[0] if chain.devices else None
         return track, device
 
+    def _find_device_on_parameter(self, device):
+        """Find the 'Device On' parameter of a device, or None if absent."""
+        try:
+            for p in device.parameters:
+                name = getattr(p, "name", "") or ""
+                if name == "Device On" and p.is_enabled:
+                    return p
+        except Exception:
+            pass
+        return None
+
+    def _device_set_enabled(self, device, enabled):
+        """Enable/disable a device reliably.
+
+        Uses the 'Device On' parameter when available (works for plugins too).
+        Falls back to ``is_enabled`` for devices without such a parameter.
+        """
+        on_param = self._find_device_on_parameter(device)
+        if on_param is not None:
+            on_param.value = 1.0 if enabled else 0.0
+            return
+        device.is_enabled = enabled
+
     def _enable_device(self, track_index, device_index, device_name="", chain_index=0):
         """Enable a device on a track."""
         try:
             _, device = self._get_track_and_device(
                 track_index, device_index, device_name, chain_index
             )
-            device.is_enabled = True
+            self._device_set_enabled(device, True)
             return {"enabled": True, "device_name": device.name}
         except Exception as e:
             self.log_message("Error enabling device: " + str(e))
@@ -3873,7 +4063,7 @@ class AbletonMCP(ControlSurface):
             _, device = self._get_track_and_device(
                 track_index, device_index, device_name, chain_index
             )
-            device.is_enabled = False
+            self._device_set_enabled(device, False)
             return {"enabled": False, "device_name": device.name}
         except Exception as e:
             self.log_message("Error disabling device: " + str(e))
@@ -3966,6 +4156,97 @@ class AbletonMCP(ControlSurface):
             return {"pads": pads}
         except Exception as e:
             self.log_message("Error getting drum pad info: " + str(e))
+            raise
+
+    def _resolve_drum_pad_device(
+        self, track_index, device_index, note, chain_index, sub_device
+    ):
+        """Return (chain, device) for a drum pad by MIDI note, or raise."""
+        track = self._song.tracks[track_index]
+        if device_index < 0 or device_index >= len(track.devices):
+            raise IndexError("Device index out of range")
+        device = track.devices[device_index]
+        if not hasattr(device, "drum_pads"):
+            raise RuntimeError("Device is not a Drum Rack")
+        for pad in device.drum_pads:
+            if pad.note == note:
+                if not pad.chains or len(pad.chains) <= chain_index:
+                    raise RuntimeError("Pad has no chain at chain_index")
+                chain = pad.chains[chain_index]
+                if sub_device < 0 or sub_device >= len(chain.devices):
+                    raise RuntimeError("Chain has no device at device_index_in_chain")
+                return chain, chain.devices[sub_device]
+        raise RuntimeError("No pad with note " + str(note))
+
+    def _get_drum_pad_parameters(
+        self, track_index, device_index, note, chain_index, sub_device
+    ):
+        """List parameters of a drum pad's instrument device."""
+        try:
+            chain, dev = self._resolve_drum_pad_device(
+                track_index, device_index, note, chain_index, sub_device
+            )
+            params = []
+            for p in getattr(dev, "parameters", []):
+                params.append(
+                    {
+                        "name": p.name,
+                        "value": p.value if hasattr(p, "value") else None,
+                        "min": p.min if hasattr(p, "min") else None,
+                        "max": p.max if hasattr(p, "max") else None,
+                        "is_quantized": p.is_quantized
+                        if hasattr(p, "is_quantized")
+                        else None,
+                    }
+                )
+            return {
+                "note": note,
+                "chain": chain.name,
+                "device": dev.name,
+                "device_count": len(chain.devices),
+                "parameters": params,
+            }
+        except Exception as e:
+            self.log_message("Error getting drum pad parameters: " + str(e))
+            raise
+
+    def _set_drum_pad_parameter(
+        self,
+        track_index,
+        device_index,
+        note,
+        chain_index,
+        sub_device,
+        parameter_name,
+        value,
+    ):
+        """Set a drum pad's instrument device parameter by name (0-1 range)."""
+        try:
+            chain, dev = self._resolve_drum_pad_device(
+                track_index, device_index, note, chain_index, sub_device
+            )
+            for p in getattr(dev, "parameters", []):
+                if p.name == parameter_name and hasattr(p, "value"):
+                    try:
+                        p.value = float(value)
+                    except Exception:
+                        # fall back to min/max interpolation
+                        rng = float(p.max - p.min) if hasattr(p, "min") else 1.0
+                        p.value = (
+                            float(p.min) + float(value) * rng
+                            if hasattr(p, "min")
+                            else float(value)
+                        )
+                    return {
+                        "note": note,
+                        "chain": chain.name,
+                        "device": dev.name,
+                        "parameter": parameter_name,
+                        "value": p.value,
+                    }
+            raise RuntimeError("Parameter not found: " + parameter_name)
+        except Exception as e:
+            self.log_message("Error setting drum pad parameter: " + str(e))
             raise
 
     # ═══════════════════════════════════════════════════════════════

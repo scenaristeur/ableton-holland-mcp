@@ -1,0 +1,10 @@
+This generated MIDI Remote Script is yours.
+
+Released into the public domain (CC0 1.0 Universal): you may use, modify,
+distribute and sell it, with no restrictions and no attribution required.
+
+Made with the free generator at:
+https://midiremotescripts.structure-void.com/generator
+
+The generator and the documentation are (c) Julien Bayle / Structure Void,
+licensed CC BY-NC-SA 4.0. That license does NOT apply to this generated script.

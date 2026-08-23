@@ -1082,6 +1082,48 @@ def get_drum_pad_info(track_index: int, device_index: int = 1) -> dict[str, Any]
     )
 
 
+@app.tool()
+def get_drum_pad_parameters(
+    track_index: int,
+    device_index: int = 1,
+    note: int = 36,
+    chain_index: int = 0,
+    device_index_in_chain: int = 0,
+) -> dict[str, Any]:
+    """List parameters of a drum pad's instrument device (by MIDI note)."""
+    return _cmd(
+        "get_drum_pad_parameters",
+        track_index=track_index,
+        device_index=device_index,
+        note=note,
+        chain_index=chain_index,
+        device_index_in_chain=device_index_in_chain,
+    )
+
+
+@app.tool()
+def set_drum_pad_parameter(
+    track_index: int,
+    device_index: int = 1,
+    note: int = 36,
+    parameter_name: str = "Volume",
+    value: float = 1.0,
+    chain_index: int = 0,
+    device_index_in_chain: int = 0,
+) -> dict[str, Any]:
+    """Set a parameter of a drum pad's instrument device (by MIDI note)."""
+    return _cmd(
+        "set_drum_pad_parameter",
+        track_index=track_index,
+        device_index=device_index,
+        note=note,
+        chain_index=chain_index,
+        device_index_in_chain=device_index_in_chain,
+        parameter_name=parameter_name,
+        value=value,
+    )
+
+
 # ── Track Mixer Extras ──────────────────────────────────────────────────────
 
 
@@ -1502,8 +1544,23 @@ def show_message(text: str) -> dict[str, Any]:
 
 @app.tool()
 def get_cpu_load() -> dict[str, Any]:
-    """Get CPU usage: average and peak percent."""
+    """Get CPU usage: average and peak percent, plus process RAM (MB)."""
     return _cmd("get_cpu_load")
+
+
+@app.tool()
+def get_cpu_report() -> dict[str, Any]:
+    """CPU + RAM globaux et diagnostics par piste (états devices, RAM).
+
+    Utile pour repérer les devices gourmands (Surge, Analog Lab, Ozone, plugins).
+    """
+    return _cmd("get_cpu_report")
+
+
+@app.tool()
+def get_track_diagnostics(track_index: int) -> dict[str, Any]:
+    """Per-track CPU/RAM diagnostics: device on/off states, plugin/rack flags, RAM."""
+    return _cmd("get_track_diagnostics", track_index=track_index)
 
 
 @app.tool()
