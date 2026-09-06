@@ -165,6 +165,11 @@ Live's Python API **does not expose per-track CPU** (the mixer's per-track meter
 
 **Fix:** Restart the MCP server: Ctrl+C → `.venv/Scripts/python ableton_full_mcp_server.py`. The server redetects `CABLE Output` on restart.
 
+## Core Library Kits — Drum Rack imbriqué
+**Symptom:** `get_drum_pad_info`/`get_drum_pad_parameters` échoue avec « Only drum racks can have pads! » sur un kit chargé depuis Core Library (ex. Big Break Kit).
+**Cause:** les kits .adg de Core Library se chargent comme **`InstrumentGroupDevice`** dont la chain contient le vrai **`DrumGroupDevice`** (les pads vivent là, PAS à la racine du track.devices). Live définit de plus `device.drum_pads` comme propriété qui **lève** cette erreur sur un non-drum device → `hasattr()` est trompeur.
+**Fix:** le RS descend désormais dans les chains via `_find_drum_rack()` (check du `class_name` contenant « Drum ») + `_try_drum_pads()` (guard try/except). Cela permet de régler le volume d'un pad individuel (`set_drum_pad_parameter(note=N, "Volume", v)`) sans toucher au rack entier. Ex. charley = note 42, snare = 38, kick = 36.
+
 ## Production Constraints — Mix Translation
 - **Every mix must be audible on BOTH big speakers (concert/FOH, sub present) AND smartphone speakers (no sub < ~150 Hz, heavy compression, no detail).** These are opposite ends: what makes sound live can be inaudible on a phone and vice-versa.
 - **Run a global frequency-distribution analysis on every song** (capture via VB-Cable + spectral analysis: centroid, rolloff, band energy). The midrange (200 Hz – 4 kHz) carries intelligibility everywhere; bass content that lives only in the sub disappears on phone.

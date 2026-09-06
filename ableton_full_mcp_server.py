@@ -354,6 +354,84 @@ def get_session_info() -> dict[str, Any]:
 
 
 @app.tool()
+def list_midi_mappings() -> dict[str, Any]:
+    """List MIDI mappings owned by the Remote Script (Affectations MIDI).
+    Returns per mapping: channel, msg_type, identifier (CC#/Note), min, max,
+    mode, target. Only mappings created by this script (listener-based)."""
+    return _cmd("list_midi_mappings")
+
+
+@app.tool()
+def map_midi_control(
+    channel: int = 0,
+    identifier: int = 16,
+    msg_type: str = "cc",
+    min_value: float = 0,
+    max_value: float = 127,
+    mode: str = "absolute",
+    target_type: str = "track_volume",
+    track_index: int = 0,
+    device_index: int = 0,
+    parameter_name: str = "",
+    scene_index: int = 0,
+) -> dict[str, Any]:
+    """Bind an incoming MIDI CC/Note to a Live parameter (live control).
+
+    mapping = {channel, identifier, msg_type, min, max, mode, target:{...}}.
+    target.type: track_volume | track_pan | master_volume | device_param |
+                 scene | clip_slot.
+    Ex: CC16 ch1 -> Track 1 Volume:
+        channel=0, identifier=16, msg_type='cc', target_type='track_volume', track_index=0.
+    """
+    mapping = {
+        "channel": channel,
+        "identifier": identifier,
+        "msg_type": msg_type,
+        "min": min_value,
+        "max": max_value,
+        "mode": mode,
+        "target": {
+            "type": target_type,
+            "track_index": track_index,
+            "device_index": device_index,
+            "parameter_name": parameter_name,
+            "scene_index": scene_index,
+        },
+    }
+    return _cmd("map_midi_control", mapping=mapping)
+
+
+@app.tool()
+def map_midi_control_direct(
+    channel: int = 0,
+    identifier: int = 16,
+    msg_type: str = "cc",
+    target_type: str = "track_volume",
+    track_index: int = 0,
+    device_index: int = 0,
+    parameter_name: str = "",
+) -> dict[str, Any]:
+    """Create a DIRECT MIDI mapping that appears in Ableton's native
+    'Affectations MIDI' panel (channel, CC, path, name, min, max).
+
+    Same target_type as map_midi_control (track_volume | track_pan |
+    master_volume | device_param). Uses connect_to() so Live routes the MIDI
+    message to the parameter at the C++ level."""
+    mapping = {
+        "channel": channel,
+        "identifier": identifier,
+        "msg_type": msg_type,
+        "target": {
+            "type": target_type,
+            "track_index": track_index,
+            "device_index": device_index,
+            "parameter_name": parameter_name,
+        },
+    }
+    return _cmd("map_midi_control_direct", mapping=mapping)
+
+
+@app.tool()
 def get_track_info(track_index: int) -> dict[str, Any]:
     """Get detailed info about a track: name, devices, clip slots, volume, pan."""
     return _cmd("get_track_info", track_index=track_index)

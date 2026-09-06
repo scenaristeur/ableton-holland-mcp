@@ -147,6 +147,8 @@ chroma_cqt(y_path)
 5. **Ne pas hésiter à monter le volume** — un mix à RMS 0.17 est sain pour l'électro (les calculs de ratio brut ne tiennent pas compte du masquage fréquentiel)
 6. Vérifier le full mix RMS ~0.15-0.25 pour un rendu percutant
 
+**⚠️ LEÇON TERRAIN (Funk Hésiodique, 2026) — les RMS ne font pas foi :** la basse mesurée solo à RMS 0.34 semblait « trop forte », mais une fois le volume piste baissé à 0.5 elle devenait **INAUDIBLE au casque**. Les captures RMS moyennent les pics ; l'oreille perçoit le grave différemment. **Les captures servent au SPECTRE (centroid/rolloff) et aux comparaisons RELATIVES entre pistes, mais le niveau final se règle à l'oreille** (et en contexte !). Toujours ! Désactiver la règle « 0.07-0.10 pour les leads » en cas de conflit avec l'écoute.
+
 #### EQ Carving (prévention du masquage)
 
 Quand plusieurs instruments jouent simultanément, ils se disputent les mêmes fréquences. Solution : créer une "niche" pour chaque instrument :
@@ -259,6 +261,13 @@ Déconnecter : `surge_unmap_modulation(mod_source, target, instance)`
 
 **Limitations OSC connues** : arpégiateur, wavetable selection, et filter subtypes non exposés via OSC. À configurer manuellement dans l'UI Surge XT.
 
+**💡 Astuce terrain (Funk Hésiodique, 2026) : les oscillateurs MUTÉS sont des alliés.** Les patchs Surge n'activent souvent qu'osc1 (osc2/3 sont `mute=1` dans le mixer). Pour ajouter des harmoniques PROPRES (audibilité smartphone) sans saturer :
+- `surge_get_param("a/mixer/oscN/mute")` → découvrir les osc coupés
+- `surge_set_param("a/mixer/oscN/mute", 0)` pour les activer
+- `surge_set_param("a/osc/N/octave", 2)` pour monter un layer à l'octave → le "clack" de la basse audible sur petit haut-parleur
+- BAISSER le drive d'autant (le drive crade, le layer octave enrichit proprement)
+- Réverbérer : fermer le LP du mixer si le filtre tue les nouvelles harmoniques (FM Slap : filtre LP actif à 419 Hz qui coupait le layer → ouvert à 682 Hz, centroid basse 188→370 Hz)
+
 **Patch selection by style**:
 
 | Style | Bass | Guitar/Pluck | Pad | Lead | Percs |
@@ -297,6 +306,32 @@ capture_and_analyze(position_beats=32, duration_sec=10, output_name="couplet1")
 capture_and_analyze(position_beats=0, duration_sec=20, output_name="part1")
 capture_and_analyze(position_beats=30, duration_sec=20, output_name="part2")
 ```
+
+### Grooves & Swing (MPC) — découvertes session « Funk Hésiodique » (2026-09)
+
+Les **Groove Pool presets** (`.agr`) vivent dans la Core Library et SONT accessibles via MCP :
+
+```
+Chemin browser : packs/Core Library/Grooves/Swing/MPC/
+Ex. URI : query:LivePacks#www.ableton.com/0:Grooves:Swing:MPC:Swing MPC Funker 16ths 60.agr
+```
+
+Les catégories `packs/Core Library/Grooves/{Percussion,Style,Swing,Utility}` existent et se listent. Sous `Swing/` on trouve : `Basic`, `Logic`, `MPC`, `Notator`, `SP 1200`. Sous `MPC/` : *MPC 3000 8ths/16ths 54-74*, *Double Up/Down*, **Funker 16ths 55/60/70** (le plus adapté au funk).
+
+**Commentaire MCP** : `query:LivePacks#www.ableton.com/0` = Core Library. Le **`.agr` se charge via `load_instrument_or_effect(track, uri)`** (il répond `loaded` mais ne crée PAS de device → il s'applique au groove de la piste/des clips).
+
+**Deux niveaux de contrôle groove :**
+| Niveau | Outil | Effet |
+|---|---|---|
+| Appliquer un preset | `load_instrument_or_effect(uri=.agr)` sur la piste | Associe le groove aux clips de cette piste |
+| Doser le swing | `set_groove_amount(0.0–1.0)` | Modifie le groove de TOUS les clips grooves (global) |
+
+**⚠️ Points clés :**
+1. `groove_amount` est **GLOBAL** — il affine le swing de tous les clips ayant un groove, pas seulement un clip.
+2. Appliquer le groove à **1 piste seule** (ex. drums) décale les autres pistes restées grille droite → **l'utilisateur perçoit un "décalage"**. Appliquer le même `.agr` à toutes les pistes instrument pour une cohésion.
+3. Un clip **recréé** (delete + create) **perd son groove** → toujours re-vérifier les pistes après réécriture d'un clip.
+4. Les `.agr` d'une sous-catégorie = des déclinaisons de swing (8ths vs 16ths = la résolution d'application ; 54-74 = le pourcentage de swing).
+5. Les grooves s'appliquent aux clips **MIDI** (durées de notes), pas au timing des pistes audio.
 
 ### Automation Envelope Workflow
 
@@ -398,6 +433,12 @@ get_track_routing(track_index=0)
 set_track_input_routing(track_index=0, routing_type="Ext. In", channel="1")
 set_track_output_routing(track_index=0, routing_type="Sends Only")
 ```
+
+**Sidechain kick→basse (Funk Hésiodique, 2026) :**
+1. Charger un Compressor sur la piste basse : `load_instrument_or_effect(track=1, uri="query:AudioFx#Compressor")`
+2. Pointer l'**input audio** de la basse sur le drum rack : `set_track_input_routing(track=1, routing_type="Drums", channel="All Channels")` → `input_sub_routing="Post FX"`
+3. Sur le Compressor : `S/C On=1`, `S/C EQ Type=0` (Low Shelf) ou `5` (High pass) pour ne réagir qu'au kick, `Ratio≈0.9`, `Threshold≈0.5`, `Release≈0.35` → **la basse "pompe" sur chaque kick** (le son "baggy funky" validé).
+4. Ne pas toucher à l'input MIDI de la basse (elle reste un instrument MIDI — seul l'audio d'entrée du Compressor est détourné).
 
 ### Arrangement Loop
 

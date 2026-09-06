@@ -11,6 +11,22 @@ import threading
 import time
 import traceback
 
+try:
+    from midi_mappings import MidiMappingRouter
+except Exception:
+    # Module not on default path: add this script's own directory then retry.
+    MidiMappingRouter = None
+    try:
+        import os
+
+        _rs_dir = os.path.dirname(os.path.abspath(__file__))
+        if _rs_dir not in sys.path:
+            sys.path.insert(0, _rs_dir)
+        from midi_mappings import MidiMappingRouter
+    except Exception:
+        # If it still fails, keep the RS functional (MIDI maps optional).
+        MidiMappingRouter = None
+
 # Change queue import for Python 2
 try:
     import Queue as queue  # Python 2
@@ -44,6 +60,13 @@ class AbletonMCP(ControlSurface):
         # Cache the song reference for easier access
         self._song = self.song()
 
+        # MIDI mappings router (modularized in midi_mappings.py)
+        self.midi_mappings = (
+            MidiMappingRouter(self, config=[], log=self.log_message)
+            if MidiMappingRouter is not None
+            else None
+        )
+
         # Start the socket server
         self.start_server()
 
@@ -75,6 +98,10 @@ class AbletonMCP(ControlSurface):
             if client_thread.is_alive():
                 # We don't join them as they might be stuck
                 self.log_message("Client thread still alive during disconnect")
+
+        # Release MIDI mappings
+        if hasattr(self, "midi_mappings") and self.midi_mappings is not None:
+            self.midi_mappings.clear()
 
         ControlSurface.disconnect(self)
         self.log_message("AbletonMCP disconnected")
@@ -244,6 +271,18 @@ class AbletonMCP(ControlSurface):
                     self.log_message("Reload failed: " + str(e))
                     response["status"] = "error"
                     response["message"] = "Reload failed: " + str(e)
+            elif command_type == "list_midi_mappings":
+                if self.midi_mappings is not None:
+                    response["result"] = {
+                        "count": self.midi_mappings.count,
+                        "mappings": self.midi_mappings.list_mappings(),
+                    }
+                else:
+                    response["result"] = {
+                        "count": 0,
+                        "mappings": [],
+                        "note": "midi_mappings module not available",
+                    }
             # Commands that modify Live's state should be scheduled on the main thread
             elif command_type in [
                 "create_midi_track",
@@ -354,6 +393,8 @@ class AbletonMCP(ControlSurface):
                 "experiment_envelope",
                 "envelope_dump",
                 "test_create_event",
+                "map_midi_control",
+                "map_midi_control_direct",
             ]:
                 # Use a thread-safe approach with a response queue
                 response_queue = queue.Queue()
@@ -852,6 +893,24 @@ class AbletonMCP(ControlSurface):
                             result = self._test_create_event(
                                 track_index, clip_index, target, time, value
                             )
+                        elif command_type == "map_midi_control":
+                            mapping = params.get("mapping", {})
+                            if self.midi_mappings is not None:
+                                result = self.midi_mappings.add_mapping(mapping)
+                            else:
+                                result = {
+                                    "bound": False,
+                                    "error": "midi_mappings module not available",
+                                }
+                        elif command_type == "map_midi_control_direct":
+                            mapping = params.get("mapping", {})
+                            if self.midi_mappings is not None:
+                                result = self.midi_mappings.add_direct_mapping(mapping)
+                            else:
+                                result = {
+                                    "bound": False,
+                                    "error": "midi_mappings module not available",
+                                }
 
                         # Put the result in the queue
                         response_queue.put({"status": "success", "result": result})
@@ -4130,8 +4189,37 @@ class AbletonMCP(ControlSurface):
             self.log_message("Error getting chain info: " + str(e))
             raise
 
+    def _find_drum_rack(self, device):
+        """Return the first Drum Rack in a device, descending into nested chains.
+
+        Some Core Library kits load as an InstrumentGroupDevice whose chains
+        contain the actual DrumGroupDevice (pads live there).
+        """
+        if "Drum" in device.class_name and self._try_drum_pads(device):
+            return device
+        for chain in getattr(device, "chains", []) or []:
+            for sub in getattr(chain, "devices", []) or []:
+                found = self._find_drum_rack(sub)
+                if found is not None:
+                    return found
+        return None
+
+    def _try_drum_pads(self, device):
+        """Return the device's drum_pads, or None if it raises.
+
+        Live defines ``drum_pads`` as a property that raises
+        'Only drum racks can have pads!' when accessed on a non-drum device,
+        so ``hasattr`` is misleading — guard with try/except.
+        """
+        try:
+            if device.drum_pads:
+                return device.drum_pads
+        except Exception:
+            return None
+        return None
+
     def _get_drum_pad_info(self, track_index, device_index):
-        """List filled drum pads in a Drum Rack."""
+        """List filled drum pads in a Drum Rack (descends into nested chains)."""
         try:
             if track_index < 0 or track_index >= len(self._song.tracks):
                 raise IndexError("Track index out of range")
@@ -4139,9 +4227,10 @@ class AbletonMCP(ControlSurface):
             if device_index < 0 or device_index >= len(track.devices):
                 raise IndexError("Device index out of range")
             device = track.devices[device_index]
+            drum = self._find_drum_rack(device)
             pads = []
-            if hasattr(device, "drum_pads"):
-                for pad in device.drum_pads:
+            if drum is not None:
+                for pad in drum.drum_pads:
                     if pad.chains and len(pad.chains) > 0:
                         chain = pad.chains[0]
                         pads.append(
@@ -4153,7 +4242,7 @@ class AbletonMCP(ControlSurface):
                                 "device_count": len(chain.devices),
                             }
                         )
-            return {"pads": pads}
+            return {"pads": pads, "drum_device": drum.name if drum else None}
         except Exception as e:
             self.log_message("Error getting drum pad info: " + str(e))
             raise
@@ -4161,14 +4250,19 @@ class AbletonMCP(ControlSurface):
     def _resolve_drum_pad_device(
         self, track_index, device_index, note, chain_index, sub_device
     ):
-        """Return (chain, device) for a drum pad by MIDI note, or raise."""
+        """Return (chain, device) for a drum pad by MIDI note, or raise.
+
+        Descends into nested chains to find the Drum Rack (kits loaded as
+        InstrumentGroupDevice embed the real DrumGroupDevice in a chain).
+        """
         track = self._song.tracks[track_index]
         if device_index < 0 or device_index >= len(track.devices):
             raise IndexError("Device index out of range")
         device = track.devices[device_index]
-        if not hasattr(device, "drum_pads"):
+        drum = self._find_drum_rack(device)
+        if drum is None:
             raise RuntimeError("Device is not a Drum Rack")
-        for pad in device.drum_pads:
+        for pad in drum.drum_pads:
             if pad.note == note:
                 if not pad.chains or len(pad.chains) <= chain_index:
                     raise RuntimeError("Pad has no chain at chain_index")

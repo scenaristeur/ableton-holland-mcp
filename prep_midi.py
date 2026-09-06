@@ -38,6 +38,14 @@ DRUM_PITCH_MAP: dict[int, int] = {
     55: 45,  # tom mid
     57: 47,  # tom low
     82: 44,  # shaker
+    # extraneous percussion -> Selector Kit Warm pads
+    81: 51,  # bell/clavé -> Ride
+    73: 48,  # vibra -> Perc
+    58: 47,  # perc/cloche -> Tom 2
+    83: 44,  # shaker/jingle -> Shaker
+    71: 51,  # triangle -> Ride
+    77: 51,  # clavet -> Ride
+    56: 47,  # perc -> Tom 2
 }
 
 PPQ = 4  # beats per bar (4/4)

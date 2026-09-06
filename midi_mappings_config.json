@@ -1,0 +1,12 @@
+{
+  "mappings": [
+    {
+      "_exemple": "volume piste 1 via CC19 (apparait dans le panneau natif)",
+      "direct": true,
+      "channel": 0,
+      "identifier": 19,
+      "msg_type": "cc",
+      "target": {"type": "track_volume", "track_index": 1, "device_index": 0, "parameter_name": ""}
+    }
+  ]
+}
