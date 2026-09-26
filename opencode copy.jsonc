@@ -12,7 +12,7 @@
       "enabled": true,
     },
       "experimental": {
-    "mcp_timeout": 600000
+    "mcp_timeout": 1000000
   }
   },
 }

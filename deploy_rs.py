@@ -8,6 +8,10 @@ MOD = r"C:\Users\admin\dev\ableton-holland-mcp\midi_mappings.py"
 CFG = r"C:\Users\admin\dev\ableton-holland-mcp\midi_mappings_config.json"
 DSTS = [
     r"C:\ProgramData\Ableton\Live 12 Lite\Resources\MIDI Remote Scripts\AbletonMCP",
+    r"C:\Users\admin\AppData\Roaming\Ableton\Live 12.4.6\Preferences\User Remote Scripts\AbletonMCP",
+    r"C:\Users\admin\AppData\Roaming\Ableton\Live 12.4.5\Preferences\User Remote Scripts\AbletonMCP",
+    r"C:\Users\admin\AppData\Roaming\Ableton\Live 12.4.3\Preferences\User Remote Scripts\AbletonMCP",
+    r"C:\Users\admin\Documents\Ableton\User Library\Remote Scripts\AbletonMCP",
     # NOTE: AbletonMCPExtended is an OLD Remote Script, ne PAS deployer.
 ]
 

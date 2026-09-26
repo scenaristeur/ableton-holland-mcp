@@ -206,3 +206,23 @@ Live's Python API **does not expose per-track CPU** (the mixer's per-track meter
 - Do NOT invent drum grooves "blind" (sparse/cre-scendo patterns) — they create off-beat artifacts; reuse an existing humanized pattern (varying velocities + slight timing offsets) instead
 - Do NOT use `set_arrangement_clip_notes` to replace existing notes — it ADDS duplicates; recreate a session clip (create_clip to correct length) + notes, then `duplicate_to_arrangement`
 - Do NOT run `deploy_rs.py` if Ableton isn't running (safe, but reload will timeout)
+
+## Skills Reference
+
+### Installed skills (`~/.agents/skills/`)
+
+| Skill | Covers |
+|---|---|
+| `ableton-mcp` | MCP architecture, tools, troubleshooting, device mgmt, audio routing, diagnostics |
+| `plugin-exposure` | **VST parameter exposure tables** (🟢/🟡/🔴), plugin selection strategy |
+| `anti-patterns` | **What NOT To Do**, mix discoveries/leçons terrain, diagnostics CPU |
+| `plugin-browser` | Browser URIs, navigation, FileId lookup |
+| `surge-osc` | Surge XT OSC parameters, patches, modulation |
+| `full-mix-workflow` | 6-step mix procedure (staging→validation) |
+| `mix-translation` | Multi-platform mix (phone, speakers, Spotify) |
+| `analysis-tools` | Capture, spectral analysis, tempo/key detection |
+| `automation-envelopes` | Step automation, insert_step, targets |
+| `scene-workflow` | Session view scene-by-scene, velocities, validation |
+| `project-setup` | Venv, deps, Voicemeeter, RS deploy |
+| `david-prefs` | User profile (tessiture, preferences, FX chains) |
+| `midi-remake` | MIDI .mid → Ableton arrangement method |

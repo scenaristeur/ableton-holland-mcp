@@ -360,6 +360,7 @@ class AbletonMCP(ControlSurface):
                 "set_clip_envelope",
                 "set_arrangement_clip_envelope",
                 "set_automation_curve",
+                "set_automation_lanes",
                 "set_track_volume",
                 "set_track_solo",
                 "set_track_mute",
@@ -688,6 +689,14 @@ class AbletonMCP(ControlSurface):
                             result = self._set_automation_curve(
                                 track_index, clip_index, target, points, is_arrangement
                             )
+                        elif command_type == "set_automation_lanes":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            lanes = params.get("lanes", [])
+                            is_arrangement = params.get("is_arrangement", True)
+                            result = self._set_automation_lanes(
+                                track_index, clip_index, lanes, is_arrangement
+                            )
                         elif command_type == "debug_clip_envelopes":
                             track_index = params.get("track_index", 0)
                             clip_index = params.get("clip_index", 0)
@@ -934,6 +943,7 @@ class AbletonMCP(ControlSurface):
                     "create_audio_clip": 60.0,
                     "load_instrument_or_effect": 120.0,
                     "load_browser_item": 120.0,
+                    "set_automation_lanes": 30.0,
                 }
                 queue_timeout = long_running_commands.get(command_type, 10.0)
                 try:
@@ -3984,6 +3994,105 @@ class AbletonMCP(ControlSurface):
             else:
                 dur = max(clip_end - t, 0.1)
             env.insert_step(t, dur, v)
+
+    def _set_automation_lanes(self, track_index, clip_index, lanes, is_arrangement=True):
+        """Set MULTIPLE automation lanes on a clip in a single pass.
+
+        lanes: list of {'target': str, 'points': [{'time','value'}, ...]}.
+
+        For arrangement MIDI clips the clip is rebuilt from a temp session
+        clip; all envelopes are created on that temp clip BEFORE duplicating,
+        so lanes do not overwrite each other (unlike one call per target).
+        """
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+            track = self._song.tracks[track_index]
+
+            if is_arrangement:
+                clips = list(track.arrangement_clips)
+                if clip_index < 0 or clip_index >= len(clips):
+                    raise IndexError("Arrangement clip index out of range")
+                clip = clips[clip_index]
+            else:
+                if clip_index < 0 or clip_index >= len(track.clip_slots):
+                    raise IndexError("Session clip slot index out of range")
+                slot = track.clip_slots[clip_index]
+                if not slot.has_clip:
+                    raise ValueError("No clip in slot")
+                clip = slot.clip
+
+            resolved = []
+            for lane in lanes:
+                target = lane.get("target", "volume")
+                points = lane.get("points", [])
+                if not points:
+                    continue
+                param = self._resolve_envelope_target(track, target)
+                resolved.append((param, points, target))
+
+            if not resolved:
+                return {"action": "set_automation_lanes", "lanes": []}
+
+            is_audio = hasattr(clip, "is_audio_clip") and clip.is_audio_clip
+            is_midi = hasattr(clip, "is_midi_clip") and clip.is_midi_clip
+
+            if is_arrangement and is_midi:
+                clip_start = getattr(clip, "start_time", 0.0)
+                orig_length = clip.length if hasattr(clip, "length") else 4.0
+                live_notes = tuple(clip.get_notes(0.0, 0, orig_length, 127))
+
+                temp_slot = None
+                for i in range(len(track.clip_slots)):
+                    if not track.clip_slots[i].has_clip:
+                        temp_slot = track.clip_slots[i]
+                        break
+                if temp_slot is None:
+                    raise Exception("No empty session clip slot available")
+
+                temp_slot.create_clip(orig_length)
+                if live_notes:
+                    temp_slot.clip.set_notes(live_notes)
+
+                applied = []
+                for param, points, target in resolved:
+                    env = temp_slot.clip.create_automation_envelope(param)
+                    self._apply_curve(env, points, 0.0, orig_length)
+                    applied.append(target)
+
+                track.delete_clip(clip)
+                track.duplicate_clip_to_arrangement(temp_slot.clip, float(clip_start))
+                temp_slot.delete_clip()
+
+                return {
+                    "action": "set_automation_lanes",
+                    "lanes": applied,
+                    "method": "temp_midi",
+                }
+
+            clip_start = getattr(clip, "start_time", 0.0)
+            clip_end = getattr(clip, "end_time", clip_start + 4.0)
+            applied = []
+            for param, points, target in resolved:
+                env = None
+                try:
+                    env = clip.automation_envelope(param)
+                except Exception:
+                    pass
+                if env is None:
+                    env = clip.create_automation_envelope(param)
+                env.delete_events_in_range(clip_start, clip_end)
+                self._apply_curve(env, points, 0.0, clip_end)
+                applied.append(target)
+
+            return {
+                "action": "set_automation_lanes",
+                "lanes": applied,
+                "method": "direct",
+            }
+        except Exception as e:
+            self.log_message("Error setting automation lanes: " + str(e))
+            raise
 
     def _set_arrangement_clip_envelope(self, track_index, clip_index, target, points):
         """Set modulation envelope on an arrangement clip.

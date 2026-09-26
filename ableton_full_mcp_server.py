@@ -930,6 +930,39 @@ def set_automation_curve(
 
 
 @app.tool()
+def set_automation_lanes(
+    track_index: int,
+    clip_index: int,
+    lanes: list[dict[str, Any]] = [],
+    is_arrangement: bool = True,
+) -> dict[str, Any]:
+    """Set MULTIPLE automation lanes on ONE clip in a single pass.
+
+    Use this instead of calling set_automation_curve several times: for
+    arrangement MIDI clips the clip is rebuilt from a temp session clip, so
+    several single-target calls overwrite each other. This tool creates all
+    envelopes on the temp clip BEFORE duplicating, preserving every lane.
+
+    lanes: [
+        {"target": "volume",  "points": [{"time": 0, "value": 64}, ...]},
+        {"target": "send_0",  "points": [{"time": 0, "value": 20}, ...]},
+        {"target": "device_1_Dry/Wet", "points": [...]},
+    ]
+
+    Each point: {'time': float (beats), 'value': float (raw 0-127)}.
+    target: 'volume', 'panning', 'send_N', 'device_N_PARAMNAME'.
+
+    track_index is 0-based, clip_index is 0-based."""
+    return _cmd(
+        "set_automation_lanes",
+        track_index=track_index,
+        clip_index=clip_index,
+        lanes=lanes or [],
+        is_arrangement=is_arrangement,
+    )
+
+
+@app.tool()
 def get_clip_envelope(
     track_index: int, clip_index: int, target: str = "volume"
 ) -> dict[str, Any]:
