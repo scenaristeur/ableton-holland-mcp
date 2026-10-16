@@ -1,6 +1,6 @@
 ---
 name: gain-staging
-description: Use when a track is too quiet, too loud, weak, or buried in the mix, and before any mix balancing pass. Covers the high-pass rule (150-200 Hz on everything except kick and bass), the Utility Output trick for weak instruments, the normalised volume scale, and why the master fader sits after the inserts. Trigger words : trop fort, trop maigre, trop faible, volume, gain, pan, équilibre, disparu, enterré, gain staging, HPF, passe-haut.
+description: Use when a track is too quiet, too loud, weak, or buried in the mix, and before any mix balancing pass. Covers the high-pass rule done with Auto Filter (Utility has NO Highpass in this build), the Utility Output trick for weak instruments (bipolar -1..+1, 0 = unity), the normalised volume scale, and why the master fader sits after the inserts. Trigger words : trop fort, trop maigre, trop faible, volume, gain, pan, équilibre, disparu, enterré, gain staging, HPF, passe-haut, Auto Filter, Utility.
 ---
 
 # Gain staging et niveaux
@@ -18,20 +18,35 @@ piège. Voir `pieges-niveaux`.
 
 **HPF 150-200 Hz sur tout, sauf le kick et la basse.**
 
-L'outil : `Utility` (`query:AudioFx#Utility`).
+⚠️ **L'`Utility` de ce build n'a PAS de paramètre Highpass.** Vérifié en session : ses seuls
+paramètres sont Output, Bass Mono, Bass Freq, Balance, Stereo Width, Mono, Mute, DC Filter, Channel
+Mode, Left/Right Inv. La recette historique « Utility + Highpass » **ne fonctionne pas ici**. Le
+passe-haut se fait avec **Auto Filter** réglé en High-pass :
 
 ```
-load_instrument_or_effect(track_index, "query:AudioFx#Utility")
-set_device_parameter(track_index, device_index, "Highpass", <valeur>)
+load_instrument_or_effect(track_index, "query:AudioFx#Auto Filter")
+set_device_parameter(track_index, device_index, "Filter Type", 1)   # 1 = High-pass
+set_device_parameter(track_index, device_index, "Frequency", <0-1>)
+set_device_parameter(track_index, device_index, "Resonance", 0.05)  # réso minimale
+set_device_parameter(track_index, device_index, "Dry/Wet", 1.0)
 ```
 
-Je monte à 200 Hz dès que la piste a du corps dans le bas, à 150 Hz quand elle est fine (charley,
-pluck, percussions aigues). Le kick et la basse ne sont **jamais** filtrés.
+`Frequency` est **normalisée 0-1 et logarithmique** (≈ 20 Hz → 20 kHz). Repères utiles :
+`0.22 ≈ 90 Hz` · `0.28 ≈ 140 Hz` · `0.30 ≈ 160 Hz` · `0.35 ≈ 220 Hz`. Je monte plus haut quand la
+piste a du corps dans le bas, plus bas quand elle est fine (charley, pluck, percussions aigues).
+Le kick et la basse ne sont **jamais** filtrés.
+
+Sur la **basse**, pas de passe-haut mais un **Utility → Mono** (et au besoin *Bass Mono* +
+*Bass Freq*) pour garder le grave mono.
 
 ## Instrument faible dans le mix
 
-`Utility` porte un paramètre **Output** : `0.4` ≈ **+10 dB**. C'est le levier le plus simple pour
-remettre une piste à sa place sans toucher à l'instrument.
+`Utility` porte un paramètre **Output** d'échelle **bipolaire −1 → +1**, où **0 = gain neutre
+(0 dB)** — c'est la valeur par défaut d'un Utility fraîchement chargé. Au-dessus de 0 la piste est
+amplifiée, en dessous atténuée. C'est le levier le plus simple pour remettre une piste à sa place
+sans toucher à l'instrument.
+
+**Je ne suppose jamais un chiffre de dB** : je pousse un peu, puis je **capture** avant/après.
 
 Mais **toujours vérifier par capture** avant de pousser. Un instrument discret à l'oreille peut
 l'être parce qu'il manque d'harmoniques, pas parce qu'il est trop bas — dans ce cas c'est le

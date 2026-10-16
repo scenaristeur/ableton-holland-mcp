@@ -8,6 +8,26 @@ description: Use when shaping the sound of an instrument right after loading it,
 **Je ne laisse pas le son brut jusqu'au mix.** Dès que les instruments sont posés, je travaille le
 son. Un son brut se mixe mal, et le temps perdu à le rattraper tard est bien plus cher.
 
+## ⚠️ Règle d'automatisme — le réflexe, à chaque fois
+
+**Dès que je pose un instrument, dès que j'écris des notes dessus, et dès que j'ajoute un device
+(Saturator, Auto Filter, Reverb, Delay, Compressor, Utility…), la question « comment j'adapte ça à
+la chanson ? » se pose AVANT de présenter la scène à David.** Ce n'est pas une correction après
+coup : c'est l'étape 3 de la boucle de maquette (voir `maquette-scene-par-scene`). Un preset posé
+brut — **ou un device laissé à ses valeurs par défaut** — s'entend tout de suite comme un « instru
+bas de gamme », et le rattraper plus tard coûte bien plus cher que de le régler tout de suite.
+
+Concrètement, à chaque instrument **et** à chaque device neuf :
+1. `get_device_parameters(track_index, device_index)` — lire les paramètres exposés. **Un device
+   tout juste chargé est presque toujours à régler** (Saturator sort à Drive 0.5 / Dry/Wet 1.0,
+   Auto Filter à 14 kHz, etc.).
+2. Instrument : corriger les tueurs de timbre (résonance haute, Noise Gain, filtre trop ouvert ou
+   fermé, enveloppe inadaptée au rôle).
+3. Device : régler ses paramètres pour la chanson (type de saturation, point de coupure, dose en
+   Dry/Wet, envoi/retour…), jamais « par défaut parce que ça marche ».
+4. Mettre de l'espace (envois Reverb / Delay).
+5. Seulement après, passer à la piste suivante.
+
 ## Premier ajustement : naturaliser le timbre
 
 **Un instrument posé ne sonne presque jamais comme le morceau.** Les presets et les oscillateurs

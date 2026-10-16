@@ -33,14 +33,23 @@ description: Use when deciding which instrument or engine to load for a given mu
 Wavetable, Analog, Operator, Collision, Electric, Tension : **absents de cette install**. Je peux
 charger un *son* de la famille, pas le synthé. Voir `palette-live-lite`.
 
-## Après le chargement : sculpter
+## Après le chargement : sculpter — ⚠️ réflexe automatique
 
-Un preset brut n'est pas un son fini. Dès que l'instrument est posé :
+**Un preset brut n'est pas un son fini, et ça s'entend immédiatement comme une maquette.** Dès que
+l'instrument est posé — ou dès que j'écris des notes dessus — je fais le passage de timbre **avant**
+de présenter quoi que ce soit. Ce n'est pas une option. C'est l'étape 3 de la boucle de
+`maquette-scene-par-scene`.
 
-1. `get_device_parameters` — beaucoup de synthés natifs ont des **macros internes à 0** qui servent
-   exactement à ça (Over Tone, Tone, Distort sur Basic Sub Sine).
-2. FX, en partant d'un **état transparent** (voir `sculpture-sonore`).
-3. Recapturer et itérer.
+1. `get_device_parameters(track_index, device_index)` — je lis ce qui est exposé. Beaucoup de synthés
+   natifs ont des **macros internes à 0** qui servent exactement à ça (Over Tone, Tone, Distort sur
+   Basic Sub Sine). Les familles Drift exposent aussi Filtre, Réso, Enveloppe, Space, Thick, Clip.
+2. Je cible en priorité les tueurs de « bas de gamme » : **résonance haute** (criard),
+   **Noise Gain** élevé (grésillant), **filtre trop ouvert** (aigre) ou **trop fermé** (bouché),
+   **enveloppe** inadaptée au rôle.
+3. Puis l'espace : envois vers les retours Reverb / Delay (voir `reverb-insert`), plutôt que de
+   laisser la source sèche et collée.
+4. FX, en partant d'un **état transparent** (voir `sculpture-sonore`).
+5. Recapturer et itérer.
 
 ## Surge : seulement si justifié
 

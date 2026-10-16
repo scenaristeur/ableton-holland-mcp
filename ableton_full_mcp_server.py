@@ -1720,6 +1720,100 @@ def set_groove_amount(amount: float) -> dict[str, Any]:
     return _cmd("set_groove_amount", amount=amount)
 
 
+@app.tool()
+def get_grooves() -> dict[str, Any]:
+    """List the grooves currently in the Groove Pool.
+
+    Returns each groove's index (use it with the other groove tools), name and
+    its five parameters: base, quantization_amount, timing_amount,
+    velocity_amount, random_amount.
+    """
+    return _cmd("get_grooves")
+
+
+@app.tool()
+def load_groove(uri: str) -> dict[str, Any]:
+    """Load a groove (.agr) into the Groove Pool from Live's browser.
+
+    `uri` is a browser URI, e.g.
+    "query:LivePacks#www.ableton.com/0:Grooves:Swing:MPC:Swing%20MPC%20Funker%2016ths%2060.agr".
+    Grooves live under the "packs" browser category (Core Library/Grooves/...).
+    Use get_browser_items(path="packs/Core Library/Grooves/...") to discover URIs.
+
+    The response includes the full pool listing so the load can be confirmed.
+    """
+    return _cmd("load_groove", uri=uri)
+
+
+@app.tool()
+def get_clip_groove(
+    track_index: int, clip_index: int, is_arrangement: bool = False
+) -> dict[str, Any]:
+    """Read the groove assigned to a clip (session by default)."""
+    return _cmd(
+        "get_clip_groove",
+        track_index=track_index,
+        clip_index=clip_index,
+        is_arrangement=is_arrangement,
+    )
+
+
+@app.tool()
+def set_clip_groove(
+    track_index: int,
+    clip_index: int,
+    groove_index: int,
+    is_arrangement: bool = False,
+) -> dict[str, Any]:
+    """Assign a groove from the pool (by its index) to a clip.
+
+    The groove must already be in the pool: load it first with load_groove.
+    """
+    return _cmd(
+        "set_clip_groove",
+        track_index=track_index,
+        clip_index=clip_index,
+        groove_index=groove_index,
+        is_arrangement=is_arrangement,
+    )
+
+
+@app.tool()
+def clear_clip_groove(
+    track_index: int, clip_index: int, is_arrangement: bool = False
+) -> dict[str, Any]:
+    """Remove the groove assigned to a clip."""
+    return _cmd(
+        "clear_clip_groove",
+        track_index=track_index,
+        clip_index=clip_index,
+        is_arrangement=is_arrangement,
+    )
+
+
+@app.tool()
+def set_groove_parameter(
+    groove_index: int, parameter_name: str, value: float
+) -> dict[str, Any]:
+    """Set a parameter of a groove in the pool.
+
+    `parameter_name` is one of: base, quantization_amount, timing_amount,
+    velocity_amount, random_amount.
+    """
+    return _cmd(
+        "set_groove_parameter",
+        groove_index=groove_index,
+        parameter_name=parameter_name,
+        value=value,
+    )
+
+
+@app.tool()
+def clear_grooves() -> dict[str, Any]:
+    """Attempt to empty the Groove Pool (LOM: grooves list is read-only)."""
+    return _cmd("clear_grooves")
+
+
 # ── System / Monitoring ──────────────────────────────────────────────────
 
 

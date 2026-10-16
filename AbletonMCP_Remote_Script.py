@@ -341,6 +341,12 @@ class AbletonMCP(ControlSurface):
                 "set_signature",
                 "set_crossfader",
                 "set_groove_amount",
+                # Groove pool (CRUD)
+                "load_groove",
+                "set_clip_groove",
+                "clear_clip_groove",
+                "set_groove_parameter",
+                "clear_grooves",
                 # System / Monitoring
                 "set_tempo_follower",
                 # Routing
@@ -600,6 +606,36 @@ class AbletonMCP(ControlSurface):
                         elif command_type == "set_groove_amount":
                             amount = params.get("amount", 0.0)
                             result = self._set_groove_amount(amount)
+                        elif command_type == "load_groove":
+                            uri = params.get("uri", "")
+                            result = self._load_groove(uri)
+                        elif command_type == "set_clip_groove":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            groove_index = params.get("groove_index", 0)
+                            is_arrangement = params.get("is_arrangement", False)
+                            result = self._set_clip_groove(
+                                track_index,
+                                clip_index,
+                                groove_index,
+                                is_arrangement,
+                            )
+                        elif command_type == "clear_clip_groove":
+                            track_index = params.get("track_index", 0)
+                            clip_index = params.get("clip_index", 0)
+                            is_arrangement = params.get("is_arrangement", False)
+                            result = self._clear_clip_groove(
+                                track_index, clip_index, is_arrangement
+                            )
+                        elif command_type == "set_groove_parameter":
+                            groove_index = params.get("groove_index", 0)
+                            parameter_name = params.get("parameter_name", "")
+                            value = params.get("value", 0.0)
+                            result = self._set_groove_parameter(
+                                groove_index, parameter_name, value
+                            )
+                        elif command_type == "clear_grooves":
+                            result = self._clear_grooves()
                         elif command_type == "set_tempo_follower":
                             enabled = params.get("enabled", False)
                             result = self._set_tempo_follower(enabled)
@@ -1015,6 +1051,15 @@ class AbletonMCP(ControlSurface):
                 response["result"] = self._get_crossfader()
             elif command_type == "get_groove_amount":
                 response["result"] = self._get_groove_amount()
+            elif command_type == "get_grooves":
+                response["result"] = self._get_grooves()
+            elif command_type == "get_clip_groove":
+                track_index = params.get("track_index", 0)
+                clip_index = params.get("clip_index", 0)
+                is_arrangement = params.get("is_arrangement", False)
+                response["result"] = self._get_clip_groove(
+                    track_index, clip_index, is_arrangement
+                )
             # ── System / Monitoring ────────────────────────────────────────────
             elif command_type == "get_cpu_load":
                 response["result"] = self._get_cpu_load()
@@ -2998,6 +3043,224 @@ class AbletonMCP(ControlSurface):
             return {"groove_amount": float(amount)}
         except Exception as e:
             self.log_message("Error setting groove amount: " + str(e))
+            raise
+
+    def _groove_summary(self, groove):
+        """Serialise one Groove object from the pool."""
+        return {
+            "name": groove.name,
+            "base": groove.base,
+            "quantization_amount": groove.quantization_amount,
+            "timing_amount": groove.timing_amount,
+            "velocity_amount": groove.velocity_amount,
+            "random_amount": groove.random_amount,
+        }
+
+    def _get_grooves(self):
+        """List the grooves currently in the Groove Pool."""
+        try:
+            pool = self._song.groove_pool
+            grooves = []
+            for i, g in enumerate(pool.grooves):
+                entry = {"index": i}
+                entry.update(self._groove_summary(g))
+                grooves.append(entry)
+            return {"count": len(grooves), "grooves": grooves}
+        except Exception as e:
+            self.log_message("Error listing grooves: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
+    def _load_groove(self, uri):
+        """Load a groove (.agr) into the Groove Pool from the browser.
+
+        The .agr files are exposed by Live's browser with is_loadable=True
+        (e.g. "query:LivePacks#www.ableton.com/0:Grooves:Swing:MPC:....agr").
+        ``app.browser.load_item`` on a groove item adds it to the Groove Pool
+        rather than to a track, so no track is involved.
+        """
+        try:
+            app = self.application()
+            if not app:
+                raise RuntimeError("Could not access Live application")
+            item = self._find_browser_item_by_uri(app.browser, uri)
+            if not item:
+                raise ValueError("Browser item with URI '{0}' not found".format(uri))
+            pool_before = len(self._song.groove_pool.grooves)
+            app.browser.load_item(item)
+            result = self._get_grooves()
+            result["loaded"] = True
+            result["item_name"] = item.name
+            result["uri"] = uri
+            result["pool_count_before"] = pool_before
+            result["pool_count_after"] = len(self._song.groove_pool.grooves)
+            return result
+        except Exception as e:
+            self.log_message("Error loading groove: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
+    def _resolve_groove_clip(self, track_index, clip_index, is_arrangement):
+        """Return (track, clip) for a groove operation, session or arrangement."""
+        if track_index < 0 or track_index >= len(self._song.tracks):
+            raise IndexError("Track index out of range")
+        track = self._song.tracks[track_index]
+        if is_arrangement:
+            clips = list(track.arrangement_clips)
+            if clip_index < 0 or clip_index >= len(clips):
+                raise IndexError("Arrangement clip index out of range")
+            return track, clips[clip_index]
+        if clip_index < 0 or clip_index >= len(track.clip_slots):
+            raise IndexError("Session clip slot index out of range")
+        slot = track.clip_slots[clip_index]
+        if not slot.has_clip:
+            raise Exception("No clip in slot")
+        return track, slot.clip
+
+    def _get_clip_groove(self, track_index, clip_index, is_arrangement=False):
+        """Read the groove assigned to a clip."""
+        try:
+            track, clip = self._resolve_groove_clip(
+                track_index, clip_index, is_arrangement
+            )
+            info = {
+                "clip_name": clip.name,
+                "clip_type": "arrangement" if is_arrangement else "session",
+                "track_index": track_index,
+                "clip_index": clip_index,
+                "has_groove": bool(clip.has_groove),
+            }
+            if clip.has_groove:
+                g = clip.groove
+                idx = None
+                for i, pg in enumerate(self._song.groove_pool.grooves):
+                    try:
+                        same = pg == g
+                    except Exception:
+                        same = False
+                    if same or pg.name == g.name:
+                        idx = i
+                        break
+                info["groove_index"] = idx
+                if g is not None:
+                    info["groove"] = self._groove_summary(g)
+            return info
+        except Exception as e:
+            self.log_message("Error reading clip groove: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
+    def _set_clip_groove(
+        self, track_index, clip_index, groove_index, is_arrangement=False
+    ):
+        """Assign a groove from the pool to a clip."""
+        try:
+            track, clip = self._resolve_groove_clip(
+                track_index, clip_index, is_arrangement
+            )
+            grooves = self._song.groove_pool.grooves
+            if groove_index < 0 or groove_index >= len(grooves):
+                raise IndexError(
+                    "Groove index out of range (pool has {0})".format(len(grooves))
+                )
+            clip.groove = grooves[groove_index]
+            return self._get_clip_groove(track_index, clip_index, is_arrangement)
+        except Exception as e:
+            self.log_message("Error assigning groove to clip: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
+    def _clear_clip_groove(self, track_index, clip_index, is_arrangement=False):
+        """Remove the groove assigned to a clip.
+
+        The LOM rejects ``clip.groove = None`` (pybind expects an
+        AAbstractGroove handle), so a groove cannot be un-assigned through the
+        API. We report that honestly instead of pretending to succeed.
+        Workaround to neutralise a groove: set its timing_amount,
+        velocity_amount, quantization_amount and random_amount to 0 with
+        set_groove_parameter.
+        """
+        try:
+            track, clip = self._resolve_groove_clip(
+                track_index, clip_index, is_arrangement
+            )
+            if not clip.has_groove:
+                return {"removed": False, "note": "No groove assigned to this clip."}
+            try:
+                clip.groove = None
+            except Exception as inner:
+                self.log_message("Cannot unassign groove via API: " + str(inner))
+                info = self._get_clip_groove(track_index, clip_index, is_arrangement)
+                info["removed"] = False
+                info["note"] = (
+                    "Live's LOM cannot un-assign a groove (clip.groove = None is "
+                    "rejected by pybind). Remove it manually in the clip's Groove "
+                    "panel, or neutralise it with set_groove_parameter "
+                    "(timing/velocity/quantization/random = 0)."
+                )
+                return info
+            return self._get_clip_groove(track_index, clip_index, is_arrangement)
+        except Exception as e:
+            self.log_message("Error clearing clip groove: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
+    def _set_groove_parameter(self, groove_index, parameter_name, value):
+        """Set a parameter on a groove in the pool.
+
+        Allowed: base, quantization_amount, timing_amount, velocity_amount,
+        random_amount.
+        """
+        try:
+            grooves = self._song.groove_pool.grooves
+            if groove_index < 0 or groove_index >= len(grooves):
+                raise IndexError(
+                    "Groove index out of range (pool has {0})".format(len(grooves))
+                )
+            allowed = (
+                "base",
+                "quantization_amount",
+                "timing_amount",
+                "velocity_amount",
+                "random_amount",
+            )
+            if parameter_name not in allowed:
+                raise ValueError(
+                    "Unknown groove parameter '{0}' (allowed: {1})".format(
+                        parameter_name, ", ".join(allowed)
+                    )
+                )
+            g = grooves[groove_index]
+            if parameter_name == "base":
+                setattr(g, parameter_name, int(value))
+            else:
+                setattr(g, parameter_name, float(value))
+            result = {"index": groove_index}
+            result.update(self._groove_summary(g))
+            return result
+        except Exception as e:
+            self.log_message("Error setting groove parameter: " + str(e))
+            self.log_message(traceback.format_exc())
+            raise
+
+    def _clear_grooves(self):
+        """Empty the Groove Pool. Not supported by the LOM (read-only list)."""
+        try:
+            pool = self._song.groove_pool
+            grooves = list(pool.grooves)
+            if len(grooves) == 0:
+                return {"removed": 0, "note": "Groove Pool already empty"}
+            return {
+                "removed": 0,
+                "note": (
+                    "GroovePool.grooves is read-only in the LOM: individual "
+                    "grooves cannot be deleted from the API ({0} present). "
+                    "Remove them manually in Live if needed."
+                ).format(len(grooves)),
+            }
+        except Exception as e:
+            self.log_message("Error clearing grooves: " + str(e))
+            self.log_message(traceback.format_exc())
             raise
 
     # ═══════════════════════════════════════════════════════════════
