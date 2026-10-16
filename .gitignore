@@ -14,5 +14,6 @@ opencode.jsonc
 sources
 archives
 nul
+tmp/
 ableton-mcp-extended
 data/analyses

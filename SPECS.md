@@ -28,5 +28,6 @@
   2. Appelle `get_device_parameters()` et enregistre le nombre + noms des paramètres
   3. Mesure la charge CPU avant/après activation
   4. Supprime la piste
-  5. Génère un rapport complet dans `PLUGINS.md`
-- Automatiser le déploiement des résultats dans `PLUGINS.md`
+  5. Génère un rapport dans `.opencode/skills/exposition-plugins/` (skill projet)
+  6. Compare avec la palette réelle du projet, dans `.opencode/skills/palette-live-lite/`
+- Automatiser le déploiement des résultats dans ce skill

@@ -127,11 +127,16 @@ Le script se trouve aussi dans le dépôt GitHub original : [ahujasid/ableton-mc
 }
 ```
 
-Le serveur `ableton-full` (unifié) remplace les deux anciens serveurs (`ableton-mcp` + `music-analysis`). Un seul process, outils atomiques comme `capture_at_position`.
+Le serveur `ableton-full` (unifié) remplace les deux anciens serveurs (`ableton-mcp` + `music-analysis`). Un seul process, avec `capture_and_analyze()` comme point d'entrée de la capture.
 
-## Outils MCP disponibles (128 tools)
+## Outils MCP disponibles (145 tools)
 
-Tous les indices sont **0-based** (`track_index=0` = première piste après Master).
+Tous les indices sont **0-based** (`track_index=0` = première piste après Master). En revanche les
+**nombres dits à David sont 1-based** : `clip_index 0` = « clip 1 ».
+
+⚠️ Les outils de capture autonomes `capture_at_position()` et `capture_ableton()` sont **désactivés**
+dans le serveur (`# @app.tool()`). Passer par `capture_and_analyze(position_beats, duration_sec,
+output_name)`, qui appelle `capture_at_position` en interne.
 
 ### Session / Transport
 
@@ -287,7 +292,7 @@ Tous les indices sont **0-based** (`track_index=0` = première piste après Mast
 
 | Tool | Description |
 |---|---|
-| `save_project()` | Sauvegarder (non dispo Live 12 Lite) |
+| `save_project()` | Sauvegarder — **best-effort** : tente `save_current_song()`, puis `song().save()`, puis `save_and_or_rename()`, et sinon renvoie une erreur. Sur Live 12 Lite ça échoue le plus souvent → **Ctrl+S à la main**. |
 | `undo()` / `redo()` | Annuler / rétablir |
 | `freeze_track(track)` / `flatten_track(track)` | Freeze / flatten |
 | `create_scene(index)` / `fire_scene(index)` | Créer / lancer une scene |
@@ -331,8 +336,9 @@ Tous les indices sont **0-based** (`track_index=0` = première piste après Mast
 ├── ableton_mcp_server.py         # Serveur Ableton standalone (legacy)
 ├── opencode.jsonc                # Configuration MCP
 ├── requirements.txt              # Dépendances Python
-├── AGENTS.md
-├── SPEC.md
+├── AGENTS.md                     # manuel de l'assistant de production
+├── AGENTS_CODE.md                # référence technique
+├── archive/                      # plans d'archives (ex. SPEC-v3-execute.md)
 ├── .gitignore
 └── README.md
 ```

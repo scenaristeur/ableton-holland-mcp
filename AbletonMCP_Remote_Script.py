@@ -3964,8 +3964,7 @@ class AbletonMCP(ControlSurface):
                 if env is None:
                     env = clip.create_automation_envelope(param)
 
-                clip_start = getattr(clip, "start_time", 0.0)
-                clip_end = getattr(clip, "end_time", clip_start + 4.0)
+                clip_start, clip_end = self._clip_bounds(clip, is_arrangement)
                 env.delete_events_in_range(clip_start, clip_end)
                 self._apply_curve(env, points, 0.0, clip_end)
 
@@ -3978,6 +3977,29 @@ class AbletonMCP(ControlSurface):
         except Exception as e:
             self.log_message("Error setting automation curve: " + str(e))
             raise
+
+    def _clip_bounds(self, clip, is_arrangement):
+        """Return (start, end) beat bounds safe for envelope delete/apply.
+
+        Session clips have a broken/absent end_time (0 or < start), which makes
+        delete_events_in_range throw "Inverted ranges are not supported". For a
+        session clip the envelope is relative to 0..length; for an arrangement
+        clip it is in song time (start_time..end_time).
+        """
+        length = getattr(clip, "length", 4.0)
+        if not length or length <= 0:
+            length = 4.0
+        if is_arrangement:
+            start = getattr(clip, "start_time", 0.0)
+            if not start:
+                start = 0.0
+            end = getattr(clip, "end_time", start + length)
+            if not end or end <= start:
+                end = start + length
+        else:
+            start = 0.0
+            end = length
+        return start, end
 
     def _apply_curve(self, env, points, clip_start, clip_end):
         """Apply a list of automated points to an envelope using connected steps."""
@@ -4070,8 +4092,7 @@ class AbletonMCP(ControlSurface):
                     "method": "temp_midi",
                 }
 
-            clip_start = getattr(clip, "start_time", 0.0)
-            clip_end = getattr(clip, "end_time", clip_start + 4.0)
+            clip_start, clip_end = self._clip_bounds(clip, is_arrangement)
             applied = []
             for param, points, target in resolved:
                 env = None

@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 import sounddevice as sd
 import soundfile as sf
+from pydantic import BaseModel, field_validator
 
 from fastmcp import FastMCP
 
@@ -46,6 +47,80 @@ TIMEOUT = 30.0
 TIMEOUT_LONG = 120.0
 
 app = FastMCP("ableton-full-mcp")
+
+
+def _as_int(v: Any) -> Any:
+    return int(float(v)) if isinstance(v, str) else v
+
+
+def _as_float(v: Any) -> Any:
+    return float(v) if isinstance(v, str) else v
+
+
+class MidiNote(BaseModel):
+    """A single MIDI note.
+
+    This MUST stay a typed model rather than `dict[str, Any]`.
+
+    Two failure modes to avoid, both observed on this installation:
+
+    1. Untyped `list[dict[str, Any]]` — the JSON schema for the items is `{}`,
+       so anything validates. The client delivers the note properties as JSON
+       strings, they reach the Remote Script untouched, and pybind raises
+           No registered converter was able to produce a C++ rvalue of
+           type double from this Python object of type str
+    2. Plain `int` / `float` fields — FastMCP validates against the raw JSON
+       schema and rejects the string outright ("'96' is not of type
+       'integer'") before any coercion can run.
+
+    Annotating `int | str` / `float | str` and casting in a before-validator
+    satisfies both: strings pass validation and go out numeric.
+
+    Top-level scalar arguments are NOT affected (create_clip, fire_scene etc.
+    take plain ints and work fine) — only properties of objects nested inside
+    an array get stringified.
+    """
+
+    pitch: int | str
+    start_time: float | str = 0.0
+    duration: float | str = 0.25
+    velocity: int | str = 100
+    mute: bool = False
+
+    _int_fields = field_validator("pitch", "velocity", mode="before")(_as_int)
+    _float_fields = field_validator("start_time", "duration", mode="before")(_as_float)
+
+
+class AutomationPoint(BaseModel):
+    """One automation breakpoint. Typed for the same reason as MidiNote."""
+
+    time: float | str
+    value: float | str
+
+    _float_fields = field_validator("time", "value", mode="before")(_as_float)
+
+
+def _notes_payload(notes: list[MidiNote]) -> list[dict[str, Any]]:
+    return [n.model_dump() for n in notes]
+
+
+def _points_payload(points: list[AutomationPoint]) -> list[dict[str, Any]]:
+    return [p.model_dump() for p in points]
+
+
+def _lanes_payload(lanes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalise automation lanes.
+
+    The outer list stays an untyped dict in the tool schema: FastMCP cannot
+    resolve a nested BaseModel here ("set_automation_lanesArguments is not
+    fully defined"). The inner points still go through AutomationPoint so the
+    values are coerced to real floats instead of arriving as str.
+    """
+    out = []
+    for ln in lanes:
+        pts = [AutomationPoint(**p).model_dump() for p in ln.get("points", [])]
+        out.append({"target": ln.get("target", "volume"), "points": pts})
+    return out
 
 
 def _send_command(
@@ -559,11 +634,17 @@ def create_audio_clip(track_index: int, clip_index: int, path: str) -> dict[str,
 
 @app.tool()
 def add_notes_to_clip(
-    track_index: int, clip_index: int, notes: list[dict[str, Any]]
+    track_index: int, clip_index: int, notes: list[MidiNote]
 ) -> dict[str, Any]:
-    """Add MIDI notes to a clip. Each note: {pitch, start_time, duration, velocity, mute}."""
+    """Add MIDI notes to a clip. Each note: {pitch, start_time, duration, velocity, mute}.
+
+    REPLACES every existing note despite the "add" in the name.
+    """
     return _cmd(
-        "add_notes_to_clip", track_index=track_index, clip_index=clip_index, notes=notes
+        "add_notes_to_clip",
+        track_index=track_index,
+        clip_index=clip_index,
+        notes=_notes_payload(notes),
     )
 
 
@@ -905,7 +986,7 @@ def set_automation_curve(
     track_index: int,
     clip_index: int,
     target: str = "volume",
-    points: list[dict[str, Any]] = [],
+    points: list[AutomationPoint] = [],
     is_arrangement: bool = False,
 ) -> dict[str, Any]:
     """Set automation curve on a clip from a list of points.
@@ -918,13 +999,12 @@ def set_automation_curve(
 
     track_index is 0-based, clip_index is 0-based.
     is_arrangement=True for arrangement clips, False for session clips."""
-    parsed = points or []
     return _cmd(
         "set_automation_curve",
         track_index=track_index,
         clip_index=clip_index,
         target=target,
-        points=parsed,
+        points=_points_payload(points),
         is_arrangement=is_arrangement,
     )
 
@@ -957,7 +1037,7 @@ def set_automation_lanes(
         "set_automation_lanes",
         track_index=track_index,
         clip_index=clip_index,
-        lanes=lanes or [],
+        lanes=_lanes_payload(lanes),
         is_arrangement=is_arrangement,
     )
 
@@ -981,19 +1061,17 @@ def set_clip_envelope(
     track_index: int,
     clip_index: int,
     target: str = "volume",
-    points: list[dict[str, Any]] | None = None,
+    points: list[AutomationPoint] | None = None,
 ) -> dict[str, Any]:
     """Set modulation envelope points on an arrangement clip.
     Each point: {'time': float, 'value': float}.
     target: 'volume', 'panning', 'send_N'."""
-    if points is None:
-        points = []
     return _cmd(
         "set_clip_envelope",
         track_index=track_index,
         clip_index=clip_index,
         target=target,
-        points=points,
+        points=_points_payload(points or []),
     )
 
 
@@ -1002,19 +1080,17 @@ def set_arrangement_clip_envelope(
     track_index: int,
     clip_index: int,
     target: str = "volume",
-    points: list[dict[str, Any]] | None = None,
+    points: list[AutomationPoint] | None = None,
 ) -> dict[str, Any]:
     """Set modulation envelope on an arrangement clip via session-clip workaround.
     Each point: {'time': float, 'value': float}.
     target: 'volume', 'panning', 'send_N', 'device_N_PARAMNAME'."""
-    if points is None:
-        points = []
     return _cmd(
         "set_arrangement_clip_envelope",
         track_index=track_index,
         clip_index=clip_index,
         target=target,
-        points=points,
+        points=_points_payload(points or []),
     )
 
 
@@ -1111,14 +1187,14 @@ def get_arrangement_clip_notes(track_index: int, clip_index: int) -> dict[str, A
 
 @app.tool()
 def set_arrangement_clip_notes(
-    track_index: int, clip_index: int, notes: list[dict[str, Any]]
+    track_index: int, clip_index: int, notes: list[MidiNote]
 ) -> dict[str, Any]:
     """Replace all MIDI notes in an arrangement clip. Each note: {pitch, start_time, duration, velocity, mute}."""
     return _cmd(
         "set_arrangement_clip_notes",
         track_index=track_index,
         clip_index=clip_index,
-        notes=notes,
+        notes=_notes_payload(notes),
     )
 
 
