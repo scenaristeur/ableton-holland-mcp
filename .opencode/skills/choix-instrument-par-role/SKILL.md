@@ -1,6 +1,6 @@
 ---
 name: choix-instrument-par-role
-description: Use when deciding which instrument or engine to load for a given musical role (bass, pad, lead, keys, plucks, texture). Covers the native-first decision order, the Drift preset families to reach for, when Simpler or Impulse is right, and when Surge XT is genuinely justified. Trigger words : quel instrument, quel son, basse, nappe, pad, lead, pluck, texture, arpège, what sound, trouver un son.
+description: Use when deciding which instrument or engine to load for a given musical role (bass, pad, lead, keys, plucks, texture). Covers the native-first decision order, the Drift preset families to reach for, the measured preset audition (5-6 candidates captured and scored, never chosen by name), the preset spectral index, when Simpler or Impulse is right, and when Surge XT is genuinely justified. Trigger words : quel instrument, quel son, auditionner, tester des presets, index des spectres, mesurer un preset, basse, nappe, pad, lead, pluck, texture, arpège, what sound, trouver un son.
 ---
 
 # Choisir un instrument par rôle
@@ -32,6 +32,42 @@ description: Use when deciding which instrument or engine to load for a given mu
 
 Wavetable, Analog, Operator, Collision, Electric, Tension : **absents de cette install**. Je peux
 charger un *son* de la famille, pas le synthé. Voir `palette-live-lite`.
+
+## Trouver LE preset : on auditionne, on ne devine pas
+
+⚠️ **Le nom d'un preset ne dit rien de son spectre.** Vérifié : « Basic Vintage Pluck » (nom qui
+promet la chaleur) sortait à **24,6 %** d'énergie au-dessus de 10 kHz — pire que le « Snappy Pluck »
+qu'on remplaçait (12 %). Choisir par le nom, c'est choisir au hasard.
+
+### La procédure — 5 à 6 candidats, mesurés
+
+1. **Lister la famille** : `get_browser_items({path: "sounds/<Catégorie>"})`
+   — ex. `"sounds/Guitar & Plucked"`. ⚠️ La forme `query:Sounds#…` renvoie **0 item** : il faut
+   `sounds/<Catégorie>` (minuscules, slash). Chaque item porte son URI de chargement.
+2. **Garder 5-6 candidats** choisis **par le nom** — c'est tout ce que le nom permet : viser une
+   direction, pas juger.
+3. **Auditionner un par un** : `load_instrument_or_effect(track_index, uri)` →
+   `set_track_solo(solo: true)` → `capture_and_analyze` (4-8 s) → `set_track_solo(solo: false)`.
+   **Niveau inchangé pendant toute l'audition** (les presets n'ont pas le même niveau).
+4. **Mesurer les WAV** avec `scripts/spect.py` — **jamais** le RMS du tool d'analyse : il normalise.
+5. **Choisir**, puis le passage de timbre (section suivante), puis le niveau.
+
+⚠️ **Jamais sur une piste du morceau.** `load_instrument_or_effect` **remplace** l'instrument en
+place : un candidat testé = le son actuel détruit, sans retour. On auditionne sur une **piste de
+banc d'essai** — ou, pour un A/B à l'oreille, sur des pistes temporaires portant le même clip
+(`get_clip_notes` → `create_clip` + `add_notes_to_clip`).
+
+### L'index des presets (version légère)
+
+Chaque famille réellement utilisée alimente `preset_index/` : la réponse des presets à une **phrase
+de test fixe**. Le protocole et la lecture des colonnes vivent dans `preset_index/README.md`.
+
+- On le remplit **au fil de l'eau**, famille par famille, quand un rôle se présente. On ne balaie
+  pas les 84 plucks ni les ~200 kits d'avance.
+- Il **shortliste 3 candidats sans rien charger** (donc sans rien casser) et rend le choix
+  reproductible pour la fiche technique.
+- Il ne décide pas : « musical » n'est pas dans les chiffres. Et il mesure le preset **sec** — le
+  point de départ, pas le son sculpté.
 
 ## Après le chargement : sculpter — ⚠️ réflexe automatique
 

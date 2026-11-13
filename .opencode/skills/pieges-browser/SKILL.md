@@ -1,6 +1,6 @@
 ---
 name: pieges-browser
-description: Use when loading ANY instrument, effect or kit by URI, and above all when a load FAILS or times out — including load_instrument_or_effect_on_master, which does not work from MCP (verified), and load_instrument_or_effect_on_return_track (same suspicion). Also covers why get_browser_item times out, the exact URI spellings (query:AudioFx# — not "query:Audio Effects#"), that load_external_plugin loses the vendor segment, and that list_external_plugins returns browser categories rather than plugins. Trigger words : load_instrument_or_effect, load_instrument_or_effect_on_master, load_instrument_or_effect_on_return_track, AudioFx, query:AudioFx#, get_browser_item, get_browser_items, time-out, timeout, ne se charge pas, rien chargé, master, return track, browser, URI, query:, charger un plugin, charger un effet, coller un device.
+description: Use when loading ANY instrument, effect or kit by URI, and above all when a load FAILS or times out — including load_instrument_or_effect_on_master, which DOES work (corrected 23/10/2026 : it appends to the end of the chain, and there is no tool to reorder or delete a master device). Also covers why get_browser_item times out, the exact URI spellings (query:AudioFx# — not "query:Audio Effects#"), that load_external_plugin loses the vendor segment, and that list_external_plugins returns browser categories rather than plugins. Trigger words : load_instrument_or_effect, load_instrument_or_effect_on_master, load_instrument_or_effect_on_return_track, AudioFx, query:AudioFx#, get_browser_item, get_browser_items, time-out, timeout, ne se charge pas, rien chargé, master, return track, browser, URI, query:, charger un plugin, charger un effet, coller un device.
 ---
 
 # Pièges : browser
@@ -48,24 +48,30 @@ Pour découvrir la liste, `get_browser_items(path="Audio Effects")` échoue auss
 get_browser_categories(category_type="audio_effects")   # → uri "query:AudioFx"
 ```
 
-## ⚠️ `load_instrument_or_effect_on_master` time-out
+## ✅ `load_instrument_or_effect_on_master` MARCHE (corrigé le 23/10/2026)
 
-Le chargement d'un effet **natif sur le master** ne passe pas par MCP : trois tentatives, trois
-timeouts, **master toujours vide** ensuite.
+**L'ancienne note « timeout, ne marche pas » était fausse.** David l'a contestée, j'ai testé :
 
 ```
-load_instrument_or_effect_on_master("query:AudioFx#Glue Compressor")  ❌ timeout, rien chargé
+load_instrument_or_effect_on_master({ uri: "query:AudioFx#Limiter" })     → {loaded:true, item_name:"Limiter"}
+load_instrument_or_effect_on_master({ uri: "query:AudioFx#Compressor" })  → {loaded:true, item_name:"Compressor"}
+get_master_track() → devices: ["Limiter", "Compressor"]   ✅
 ```
 
-Le même timeout sur `get_browser_item(uri=...)` et `get_browser_items(path=...)` alors que
-`get_session_info` et `get_track_info` répondent — c'est le **browser** qui est lent, pas Ableton.
+L'URI est bien `query:AudioFx#NomDuDevice`. Les anciens timeouts venaient probablement du nom
+« Glue Compressor » (device qui **n'existe pas** dans Live 12 Lite — voir `fx-lite`), pas du master.
 
-**Procédure** : je demande à David de déposer le device sur le master, je vérifie avec
-`get_master_track()`, puis je règle avec `get_master_device_parameters` /
-`set_master_device_parameter`. Même règle probable sur les returns
-(`load_instrument_or_effect_on_return_track`) : demander à David.
+⚠️ **Le device est TOUJOURS ajouté en fin de chaîne.** Il n'existe **aucun outil pour réordonner ou
+supprimer un device du master** : `delete_device` refuse le master (`track_index` -1, 8, 9 → « Track
+index out of range »), et il n'y a ni `move_device` ni `insert_device`. Donc pour une chaîne à deux
+devices dans l'ordre (ex. Compressor puis Limiter), **je charge le premier d'abord**.
 
-Ne jamais réessayer en variant l'URI : le timeout ne vient pas de l'URI.
+Si l'ordre est déjà cassé, deux options, toutes deux à demander à David : glisser le device dans la
+bonne position, ou **supprimer le dernier chargé** pour que je recharge la paire dans le bon ordre.
+Ensuite je règle avec `get_master_device_parameters` / `set_master_device_parameter`.
+
+Même famille d'outils sur les returns : `load_instrument_or_effect_on_return_track` — à tester avant
+de dire qu'il ne marche pas.
 
 ## ⚠️ `load_external_plugin` ne marche pas de façon fiable
 

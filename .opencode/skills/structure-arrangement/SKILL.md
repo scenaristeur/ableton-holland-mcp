@@ -1,6 +1,6 @@
 ---
 name: structure-arrangement
-description: Use when laying out the sections of a finished song, planning an arrangement, or deciding how long a track should be. Covers the canonical arrangement skeleton (intro, couplets, buildup/refrain, pont, refrain final, outro), the 1:30-2:00 target duration, and what adds energy at each step. Trigger words : arrangement, structure, section, intro, couplet, refrain, pont, outro, durée du morceau, combien de temps.
+description: Use when laying out the sections of a finished song, planning an arrangement, or deciding how long a track should be. Covers the canonical arrangement skeleton (intro, couplets, buildup/refrain, pont, refrain final, outro), that duration depends on the song and must never be imposed from a fixed figure, and what adds energy at each step. Trigger words : arrangement, structure, section, intro, couplet, refrain, pont, outro, durée du morceau, combien de temps.
 ---
 
 # Structure d'arrangement
@@ -17,10 +17,12 @@ Intro (4 b)
   → Outro
 ```
 
-## Durée cible
+## Durée
 
-David vise **1:30-2:00**. Au-delà, l'attention décroche. Je propose une durée avec la structure, pas
-seulement la structure.
+**Il n'y a pas de durée cible fixe.** La durée dépend de la chanson : une chanson peut faire 1:30
+comme 4:00 selon son propos, son tempo et son nombre de sections. Je ne propose donc jamais une
+durée « parce qu'il faut », je propose la structure qui sert le morceau — et j'annonce la durée qui
+en découle.
 
 ## Ce qui ajoute de l'énergie, dans l'ordre
 

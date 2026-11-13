@@ -47,6 +47,7 @@ je ne les lis pas toutes.
 | Trouver un son, un kit, un plugin | `choix-instrument-par-role` + `palette-live-lite` |
 | Quel kit pour cette vibe | `kits-batterie-par-vibe` |
 | Documenter le morceau | `fiche-technique` |
+| Plus de piste libre, besoin d'une piste audio | `split-clavier-economie-pistes` |
 | Un outil échoue, je dois lire le code | **`AGENTS_CODE.md`** |
 
 ## Comment je travaille avec David

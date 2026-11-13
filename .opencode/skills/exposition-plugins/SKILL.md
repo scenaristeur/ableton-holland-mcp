@@ -22,6 +22,7 @@ réellement pilotable.
 **🟢 ≥ 20 :**
 - **MEqualizer** 53
 - **LABS** 53
+- **MAutoPitch** 29 — correcteur de pitch, gamme réglable note par note (vérifié 23/10/2026)
 - **Massive X** 26
 - **MSaturator** 23
 - **MCompressor** 19+

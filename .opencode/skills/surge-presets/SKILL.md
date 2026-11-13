@@ -1,6 +1,6 @@
 ---
 name: surge-presets
-description: Use when looking for a reproducible Surge XT patch by name, or when a Surge sound needs to be recreated exactly later. Covers searching patches by name, loading by absolute path without extension, and the two index files (factory and third-party). Trigger words : preset Surge, patch Surge, trouver un son, search_patches, load_patch, reproductible, factory, patches_factory.
+description: Use when looking for a reproducible Surge XT patch by name, or when a Surge sound needs to be recreated exactly later. Covers searching patches by name, loading by absolute path without extension, the two index files (factory and third-party), and the hard rule that OSC must be activated by David for each instance before any patch can be loaded. Trigger words : preset Surge, patch Surge, trouver un son, search_patches, load_patch, reproductible, factory, patches_factory, OSC Surge, activer l'OSC.
 ---
 
 # Presets Surge reproductibles
@@ -68,6 +68,13 @@ noise** dans le mixer — en gardant en tête que 0 = actif — pour retrouver l
 Et **recharger un patch relose l'architecture** : après chaque `surge_load_patch`, ré-approuver les
 mutes, les volumes de mixer et les LFO. Voir `surge-cpu-par-voix`.
 
+## Charger un patch dans une scène précise
+
+`surge_load_patch` n'écrit que dans la **scène A** — et il remet `scene_mode` à 0 (Single). Pour
+mettre **deux presets différents** dans A et B (mode Dual), je passe par un instantané `surge_query_all`
+→ rechargement du patch voulu dans A → injection dans `/param/b/*`. La procédure complète, et le
+split par vélocité qui va avec, sont dans `surge-cpu-par-voix`.
+
 ## Si la robotisation devient compliquée
 
 Créer une **session dédiée « création de presets »**, et sculpter chaque patch à l'oreille. C'est
@@ -101,6 +108,14 @@ Case-insensitive, cherche dans **toutes** les catégories. Le résultat donne po
 ```
 surge_load_patch(path="C:/Program Files/Common Files/VST3/Surge Synth Team/SurgeXTData/patches_factory/Pads/Warm Pad", instance=0)
 ```
+
+⚠️ **Avant de charger quoi que ce soit, vérifier que l'OSC de cette instance répond.**
+`surge_get_patch(instance=n)` doit renvoyer un nom de patch, et `surge_query_all(instance=n)` autre
+chose que `null`. Si l'un des deux échoue, **je demande à David d'activer l'OSC pour cette
+instance** et je ne charge rien tant qu'il ne l'a pas fait — un `surge_load_patch` sur une instance
+muette renvoie `{"patch": "unknown"}` et laisse le Surge sur son patch d'init.
+
+**Je ne peux pas activer l'OSC moi-même.** Règle complète et test de diagnostic : `surge-cpu-par-voix`.
 
 ⚠️ **Le path ne prend pas d'extension.** Ni `.fxp`, ni rien. Et les **forward slashes sont
 convertis automatiquement** en backslashes sous Windows, pour éviter que Surge affiche le chemin

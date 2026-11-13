@@ -39,6 +39,20 @@ le RMS. Un RMS nul ou quasi nul signifie que le signal n'est pas passé, pas que
 **Le peak est toujours 1.0** : l'interface VB-Cable sature. Le peak ne m'apprend donc rien. Je
 juge sur RMS, centroid, rolloff et dynamic range.
 
+## Où commence la capture
+
+`position_beats` ne déplace que le playhead de l'**arrangement**. L'enregistrement commence à la
+**position courante du song**, pas à 0 : la réponse contient `seek.position` (en beats). Pour situer
+une mesure dans le WAV capturé :
+
+```
+beat_clip = t_rec × BPM / 60 + seek.position
+```
+
+Et attention à la durée : le champ `duration_s` de la réponse est l'**étendue du song** pendant
+l'enregistrement (72 s pour 36 s demandés, à cause des loops de clip session), alors que le
+**fichier WAV écrit** fait la durée demandée. C'est le WAV qui fait foi.
+
 ## Si la capture est muette
 
 `CABLE_DEVICE_ID` est **figé au démarrage**. Si VB-Cable a été ajouté ou modifié après le lancement,

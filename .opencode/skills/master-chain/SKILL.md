@@ -1,6 +1,6 @@
 ---
 name: master-chain
-description: Use when finishing the mix, on the master track, or when the output clips, lacks loudness, or lacks cohesion. Covers Compressor glue then Limiter true peak, Lookahead 3 ms, Ceiling 0.95 (about -1 dB), and the rule that the master fader must stay at 1.0 because it sits after the inserts. Trigger words : master, limiter, limiteur, glue, plafond, saturation, crête, clipping, volume final, -1 dB.
+description: Use when finishing the mix, on the master track, or when the output clips, lacks loudness, or lacks cohesion. Covers Compressor glue then Limiter true peak, Lookahead 3 ms, Ceiling 0.95 (about -1 dB), and the rule that the master fader must stay at 0.85 (unity in this build — 1.0 is +6 dB and breaks the ceiling because the fader sits after the inserts). Trigger words : master, limiter, limiteur, glue, plafond, saturation, crête, clipping, volume final, -1 dB.
 ---
 
 # Chaîne master
@@ -12,8 +12,13 @@ Deux devices, dans cet ordre. Pas trois, pas un.
 `query:AudioFx#Compressor`, chargé **sur le master**. Rôle : coller les éléments en un tout, pas
 serrer la dynamique.
 
-⚠️ **Je ne peux pas le charger** : `load_instrument_or_effect_on_master` time-out. **David le dépose
-lui-même**, je vérifie avec `get_master_track()` puis je règle. URI et limites : `pieges-browser`.
+✅ **Je peux le charger moi-même** : `load_instrument_or_effect_on_master({ uri: "query:AudioFx#Compressor" })`.
+(La note « time-out, demander à David » était **fausse** — corrigée le 23/10/2026, voir `pieges-browser`.)
+
+⚠️ **Le device est ajouté en fin de chaîne**, et il n'existe **aucun outil pour réordonner ou
+supprimer un device du master**. Donc **je charge le Compressor AVANT le Limiter**, jamais l'inverse.
+Si l'ordre est cassé, c'est à David de glisser le device (ou de supprimer le dernier chargé pour que
+je recharge la paire dans le bon ordre).
 
 Je le règle **doucement** — un peu de réduction, une attaque lente, une relâche moyenne. Un master
 trop compressé tue la respiration du morceau, et c'est irréversible : on ne décompresse pas.
@@ -53,14 +58,24 @@ détaille aussi pourquoi un peak à 1.0 ne prouve rien.
 Le lookahead de 3 ms est ce qui permet au limiteur de voir la crête avant qu'elle arrive, donc de
 l'écrêter proprement au lieu de la déformer.
 
-## Le fader master reste à 1.0
+## Le fader master reste à 0.85 — l'unité, pas 1.0
 
-**Le fader master est en aval des inserts.** Il doit rester à **1.0** pour que la chaîne atteigne
-son plafond.
+**Le fader master est en aval des inserts.** Il doit rester à **0.85**, qui est **l'unité (0 dB)**
+dans cette installation — la même échelle que les pistes (`gain-staging`). Le fader est donc
+transparent et la chaîne atteint exactement son plafond.
 
-C'est contre-intuitif, et c'est une erreur classique : descendre le fader master « pour baisser un
-peu » casse le travail du limiteur situé avant lui, et le résultat n'est plus le mix, c'est un mix
-atténué. Pour baisser le mix, on baisse **les pistes**, pas le master. Voir `gain-staging`.
+⚠️ **Mesuré le 23/10/2026, l'ancienne note « le fader master reste à 1.0 » était fausse.** Sur le
+refrain final :
+
+| Fader master | RMS | Peak | Écrêtés |
+|---|---|---|---|
+| **0.85** | 0.158 | **0.936** | **0** ✅ |
+| 1.00 | 0.314 | 1.000 | **196** ❌ |
+
+1.0 = **+6 dB**. Comme le fader est *après* le limiteur, monter à 1.0 pousse tout le signal 6 dB
+au-dessus du plafond de 0.95 : le limiteur ne sert plus à rien et on écrête. **Ne pas monter le
+fader master pour gagner du niveau** — pour ça on remonte **les pistes**, et le limiteur suit.
+Voir `gain-staging`.
 
 ## Validation
 

@@ -28,6 +28,12 @@ Concrètement, à chaque instrument **et** à chaque device neuf :
 4. Mettre de l'espace (envois Reverb / Delay).
 5. Seulement après, passer à la piste suivante.
 
+## Le passage de timbre ne rattrape pas un mauvais preset
+
+Un preset mal choisi se sculpte mal : on passe son temps à retirer du souffle et de la dureté au
+lieu de construire. Le **choix** du preset vient donc **avant** ce passage — 5-6 candidats mesurés,
+pas un premier essai au hasard. Voir `choix-instrument-par-role`.
+
 ## Premier ajustement : naturaliser le timbre
 
 **Un instrument posé ne sonne presque jamais comme le morceau.** Les presets et les oscillateurs

@@ -73,9 +73,30 @@ Ex. le crash manquant (ni Toy LoFi ni Perc Kitchen n'en ont) se retrouve sur la 
    leur URI `query:Samples#FileId_XXXX`. Filtrer par nom (cymbale → `crash` / `ride` / `cymbal` /
    `splash`). ⚠️ **La sortie est énorme** : déléguer la recherche à un sous-agent qui grep le nom,
    ne pas lire tout le fichier.
-2. **Le poser sur le pad** : dans Live, glisser le sample du navigateur sur le pad voulu
-   (ex. pad **E2 = note 52** de la piste Percu, qui se charge en Simpler). C'est un geste manuel,
-   je ne peux pas le faire par script.
+2. **Le poser sur le pad** : ⚠️ **corrigé le 31/10/2026 — c'est scriptable, contrairement à ce
+   que disait cette skill.** `load_instrument_or_effect(track_index, "query:Samples#FileId_XXXX")`
+   sur une piste **Drum Rack** remplace le contenu du **pad sélectionné** dans Live. Le kit, les
+   autres pads et la chaîne d'effets de la piste restent intacts (vérifié : `get_drum_pad_info`
+   renvoie le nouveau nom du pad, `device_count` reste à 1, tous les autres pads inchangés).
+   - Le pad reçoit alors un **Simpler**, pas un DrumSampler : ses paramètres sont **Volume,
+     Transpose, Detune, Fade Out, Vol < Vel, Ve Release** — il n'y a **plus** de Tune/Level/Decay.
+   - Le sample arrive à **Volume -12 dB** : il faut le remonter (0 dB = plein niveau) sinon il est
+     inaudible dans le mix.
+   - Si le mauvais pad est visé, `undo` est la sortie.
+   - **Le chargement remplace le pad sélectionné dans la vue Drum Rack de Live.** Il n'y a aucun
+     paramètre de pad sur l'outil, ni aucun outil de sélection : la cible est un état de l'interface.
+     Sans clic de David sur le pad voulu, le chargement part sur le pad resté sélectionné (vérifié
+     le 31/10/2026 : une Bell Tambo FX a écrasé le shaker du pad 42 parce que 42 était encore
+     sélectionné). Pour un pad vide (ex. E2 = note 52), même règle : David le clique, puis je charge.
+   - **Aucune vérification par script n'est fiable.** `get_drum_pad_info` et `get_drum_pad_parameters`
+     continuent d'afficher le nom et les paramètres du kit d'origine (le Simpler vit *dans* le groupe
+     de la chaîne, invisible), et `get_chain_info` ne montre que l'`InstrumentGroupDevice` externe.
+     La seule vérification est **à l'oreille** ou par une capture solo du pad (le spectre et la
+     décroissance trahissent le sample : shaker ≈ 180 ms / 1,5-4 kHz, cloche = partiels longs).
+   - Le sample remplace le DrumSampler **à l'intérieur** du groupe : les anciens réglages
+     Tune/Level/Decay ne s'appliquent plus, et les paramètres du Simpler (Volume -12 dB au départ)
+     ne sont **pas accessibles** par les outils de pad. Prévoir le réglage de volume par David ou
+     compter sur les vélocités.
 3. **Le déclencher** : la note du pad joue le sample. L'écrire dans le clip au **pitch de ce pad**
    (E2 = 52), via `add_notes_to_clip` ou le générateur.
 

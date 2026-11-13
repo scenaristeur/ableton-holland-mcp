@@ -20,7 +20,31 @@ Je m'en sers pour comparer des **tendances**, pas pour valider un mix.
 ## Ce qui est fiable
 
 - La **détection de tonalité**.
-- Les **niveaux** : RMS, peak, dynamic range.
+- Les **niveaux** : RMS, peak, dynamic range — **à une condition : les lire sur le WAV, pas dans
+  la réponse de `capture_and_analyze`.**
+
+## ⚠️ Les chiffres rendus par `capture_and_analyze` peuvent être périmés
+
+Mesuré le 23/10/2026 : deux captures de la piste FX (piste solo, Simpler vide → silence total)
+ont rendu **exactement la même valeur**, `rms=0.339726060628891`, `peak=1`, à la 15e décimale près.
+Or les deux WAV écrits sur le disque étaient **muets** (`rms=0.000015`, `peak=0.000`).
+
+Autre écart sur une vraie capture : l'outil a annoncé `rms=0.2106` là où le fichier contient
+`0.2276`.
+
+**Règle** : la réponse de l'outil sert de repère, **le fichier WAV est la vérité**. Je recalcule
+toujours moi-même :
+
+```python
+import wave, numpy as np
+w = wave.open(path, "rb")
+d = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float64) / 32768.0
+print(np.sqrt((d**2).mean()), np.abs(d).max())
+```
+
+Et je vérifie aussi la durée et le nombre de canaux : un WAV de 8 s à 2 canaux fait 1 408 684
+octets — si la taille ne colle pas, la capture n'a pas enregistré ce que je crois.
+
 
 ## Le RMS seul ne fait pas foi
 
